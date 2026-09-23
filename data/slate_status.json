@@ -1,0 +1,20 @@
+{
+  "NFL:2026": {
+    "fetched_at": "2026-09-22T11:04:09Z",
+    "n_locked": 32,
+    "n_games": 272,
+    "status": "in_progress",
+    "updated": 1,
+    "source": "nflverse",
+    "error": null
+  },
+  "NHL:2027": {
+    "fetched_at": "2026-09-20T11:37:10Z",
+    "n_locked": 0,
+    "n_games": 1344,
+    "status": "upcoming",
+    "updated": 0,
+    "source": "nhl-web-api",
+    "error": null
+  }
+}

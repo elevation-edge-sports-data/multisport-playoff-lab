@@ -6,11 +6,18 @@ Supports historical backtesting, Monte Carlo regular-season + full playoff-brack
 
 **Live dashboard**: [https://multisport-elo-lab.streamlit.app/](https://multisport-elo-lab.streamlit.app/)
 
-**Current version: 14.0**
+**Current version: 15.0**
 
 ---
 
-## Highlights (Version 14.0)
+## Highlights (Version 15.0)
+
+- **Live slate**: pull completed scores into the season CSV, then lock those games in Monte Carlo
+  - NFL: nflverse schedules · NHL: api-web.nhle.com · NBA: BALLDONTLIE (`BALLDONTLIE_API_KEY`)
+- Sidebar **Refresh live slate** plus a **Live Slate** tab (locked vs remaining games)
+- CLI: `python -m elo_lab.workflows.live_slate --sport NFL --season 2026`
+
+### From Version 14.0
 
 - **Lock completed games** in the target-season Monte Carlo: scored games stay fixed across sims; blank games are still sampled
 - Sidebar lock line, e.g. `NFL 2026 · upcoming · 0/272 games locked` or `NFL 2026 · in progress · 16/272 games locked`
@@ -77,11 +84,11 @@ Supports historical backtesting, Monte Carlo regular-season + full playoff-brack
 
 1. **Playoff Projections** (default landing)  
    MoneyPuck-inspired odds table, dual-conference playoff spirals (default metric: Make Playoffs), and path bars. Full playoff outlook (reach each round / win championship).
-
 2. **Regular Season Projections**  
-   Distribution of wins/points across simulations, plus observed prior-season and simulated target-season trajectories (wins / points / standings rank) with uncertainty bands.
-
-3. **Model Comparison**  
+   Win/point distributions and Elo / win trajectories for the target season.
+3. **Live Slate**  
+   Locked vs remaining games after a score refresh. Use **Refresh live slate** in the sidebar, then **Run Simulation**.
+4. **Model Comparison**  
    Accuracy, Log Loss, Brier Score, calibration plots, residual diagnostics, expanded baselines (Always Home, Constant Home Rate, Coin Flip), Log5, and grid-search landscape.
 
 ---
@@ -189,6 +196,9 @@ pip install -r requirements.txt
 # optional – generate instant-default simulation files
 python -m elo_lab.workflows.generate_default_sims
 
+# optional – lock completed games into the current season CSVs
+python -m elo_lab.workflows.live_slate --sport all
+
 streamlit run app/dashboard.py
 ```
 
@@ -198,6 +208,8 @@ streamlit run app/dashboard.py
 
 | Version | Focus |
 |---------|-------|
+| 15.0    | Live slate: nflverse / NHL official web API / balldontlie |
+| 14.0    | Lock completed games in target-season Monte Carlo |
 | 5       | Canonical engine + declarative transformation pipeline |
 | 6       | Interactive Streamlit dashboard |
 | 7       | Parameter optimization + original Elevation Edge (binned) |

@@ -363,7 +363,8 @@ def render_playoff_odds_table(
         label = "Team" if c == "team" else c
         header_cells.append(
             f"<th style='text-align:{'left' if c == 'team' else 'center'};"
-            f"padding:6px 8px;font-size:0.78rem;white-space:nowrap;'>{label}</th>"
+            f"padding:6px 8px;font-size:0.78rem;white-space:nowrap;"
+            f"background-color:#f1f5f9;color:#0f172a;'>{label}</th>"
         )
     thead = "<tr>" + "".join(header_cells) + "</tr>"
 
@@ -410,9 +411,9 @@ def render_playoff_odds_table(
         body_rows.append("<tr>" + "".join(cells) + "</tr>")
 
     html = (
-        "<div style='overflow-x:auto;border:1px solid #e2e8f0;border-radius:8px;'>"
-        "<table style='border-collapse:collapse;width:100%;'>"
-        f"<thead style='background:#f8fafc;border-bottom:2px solid #cbd5e1;'>{thead}</thead>"
+        "<div class='elo-odds-table-wrap'>"
+        "<table class='elo-odds-table'>"
+        f"<thead style='background-color:#f1f5f9;color:#0f172a;'>{thead}</thead>"
         f"<tbody>{''.join(body_rows)}</tbody>"
         "</table></div>"
     )

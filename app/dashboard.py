@@ -1,7 +1,7 @@
 """
 MultiSport Elo Lab – Streamlit dashboard
 
-Version 14.0 — Lock completed games in target-season Monte Carlo
+Version 15.0 — Live slate: ingest completed scores + lock UI
 
   - NHL / NFL / NBA with full playoff-bracket simulation
   - NBA 2026–27 regular-season schedule (upcoming season; blank scores)
@@ -24,9 +24,10 @@ Version 14.0 — Lock completed games in target-season Monte Carlo
   - Playoff path bars (Color 1…5 palette)
   - Distribution of wins/points box plot on Regular Season Projections tab
   - Export Results as quiet text-style control
-  - Tabs: Regular Season Projections · Playoff Projections (default) · Model Comparison
+  - Tabs: Playoff Projections (default) · Regular Season Projections · Live Slate · Model Comparison
   - Numerical Monte Carlo progress bar (0% / 10% / … / 100%)
   - Faster simulation: playoffs reuse primary Monte Carlo standings/Elo
+  - Live slate: nflverse + NHL API + BALLDONTLIE ingest, sidebar refresh, Live Slate tab
 """
 
 from __future__ import annotations
@@ -42,6 +43,7 @@ from components.layout import configure_page
 from tabs.simulation import render_simulation_tab
 from tabs.elo_evolution import render_elo_evolution_tab
 from tabs.evaluation import render_evaluation_tab
+from tabs.live_slate import render_live_slate_tab
 
 from services.simulation_service import run_simulation
 from services.initial_ratings_service import (
@@ -58,6 +60,7 @@ from elo_lab.workflows.simulate_season import (
     describe_target_season_lock,
     format_lock_line,
 )
+from elo_lab.workflows.live_slate import update_season_scores, read_slate_status
 
 # Clean metadata API (single source of truth for teams + venues)
 from metadata import NFL_TEAMS, NHL_TEAMS, NBA_TEAMS, get_sport_teams, load_teams
@@ -88,11 +91,109 @@ st.markdown("""
         color: #374151 !important;
         background-color: transparent !important;
     }
+    /* Playoff odds + dataframes: readable headers in light and dark.
+       Colors are set on thead and th (not inherited). #f8fafc is text
+       on the dark header bar only, never a header background. */
+    .elo-odds-table-wrap {
+        overflow-x: auto;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+    }
+    .elo-odds-table {
+        border-collapse: collapse;
+        width: 100%;
+    }
+    .elo-odds-table thead,
+    .elo-odds-table thead th {
+        background: #f1f5f9 !important;
+        background-color: #f1f5f9 !important;
+        color: #0f172a !important;
+        border-bottom: 2px solid #cbd5e1;
+        font-weight: 600;
+    }
+    [data-testid="stDataFrame"],
+    [data-testid="stDataFrame"] *,
+    [data-testid="stDataFrameResizable"],
+    [data-testid="stDataFrameResizable"] * {
+        --gdg-bg-header: #f1f5f9 !important;
+        --gdg-bg-header-hovered: #e2e8f0 !important;
+        --gdg-bg-header-has-focus: #e2e8f0 !important;
+        --gdg-text-header: #0f172a !important;
+        --gdg-text-header-selected: #0f172a !important;
+        --gdg-header-fg-color: #0f172a !important;
+    }
+    [data-testid="stDataFrame"] thead,
+    [data-testid="stDataFrame"] thead th,
+    [data-testid="stDataFrameResizable"] thead,
+    [data-testid="stDataFrameResizable"] thead th {
+        background: #f1f5f9 !important;
+        background-color: #f1f5f9 !important;
+        color: #0f172a !important;
+    }
+    @media (prefers-color-scheme: dark) {
+        .elo-odds-table-wrap { border-color: #475569; }
+        .elo-odds-table thead,
+        .elo-odds-table thead th {
+            background: #1e2937 !important;
+            background-color: #1e2937 !important;
+            color: #f8fafc !important;
+            border-bottom-color: #64748b;
+        }
+        [data-testid="stDataFrame"],
+        [data-testid="stDataFrame"] *,
+        [data-testid="stDataFrameResizable"],
+        [data-testid="stDataFrameResizable"] * {
+            --gdg-bg-header: #1e2937 !important;
+            --gdg-bg-header-hovered: #334155 !important;
+            --gdg-bg-header-has-focus: #334155 !important;
+            --gdg-text-header: #f8fafc !important;
+            --gdg-text-header-selected: #f8fafc !important;
+            --gdg-header-fg-color: #f8fafc !important;
+        }
+        [data-testid="stDataFrame"] thead,
+        [data-testid="stDataFrame"] thead th,
+        [data-testid="stDataFrameResizable"] thead,
+        [data-testid="stDataFrameResizable"] thead th {
+            background: #1e2937 !important;
+            background-color: #1e2937 !important;
+            color: #f8fafc !important;
+        }
+        div[data-testid="stDownloadButton"] button:hover {
+            color: #e5e7eb !important;
+        }
+    }
+    html[data-theme="dark"] .elo-odds-table-wrap { border-color: #475569; }
+    html[data-theme="dark"] .elo-odds-table thead,
+    html[data-theme="dark"] .elo-odds-table thead th {
+        background: #1e2937 !important;
+        background-color: #1e2937 !important;
+        color: #f8fafc !important;
+        border-bottom-color: #64748b;
+    }
+    html[data-theme="dark"] [data-testid="stDataFrame"],
+    html[data-theme="dark"] [data-testid="stDataFrame"] *,
+    html[data-theme="dark"] [data-testid="stDataFrameResizable"],
+    html[data-theme="dark"] [data-testid="stDataFrameResizable"] * {
+        --gdg-bg-header: #1e2937 !important;
+        --gdg-bg-header-hovered: #334155 !important;
+        --gdg-bg-header-has-focus: #334155 !important;
+        --gdg-text-header: #f8fafc !important;
+        --gdg-text-header-selected: #f8fafc !important;
+        --gdg-header-fg-color: #f8fafc !important;
+    }
+    html[data-theme="dark"] [data-testid="stDataFrame"] thead,
+    html[data-theme="dark"] [data-testid="stDataFrame"] thead th,
+    html[data-theme="dark"] [data-testid="stDataFrameResizable"] thead,
+    html[data-theme="dark"] [data-testid="stDataFrameResizable"] thead th {
+        background: #1e2937 !important;
+        background-color: #1e2937 !important;
+        color: #f8fafc !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
 st.title("MultiSport Elo Lab")
-st.caption("NHL / NBA / NFL | Version 14.0")
+st.caption("NFL / NHL / NBA | Version 15.0")
 
 
 # ---------------------------------------------------------------------------
@@ -175,9 +276,25 @@ _HOME_ADV_LABELS = {
 # ---------------------------------------------------------------------------
 st.sidebar.header("Model Configuration")
 
-# Sport + Season
-sport = st.sidebar.selectbox("Sport", ["NHL", "NBA", "NFL"], index=0)
-st.session_state["sport"] = sport  # available to evaluation tab before Run Simulation
+# Sport buttons (NFL default)
+_SPORT_ORDER = ["NFL", "NHL", "NBA"]
+if "sport" not in st.session_state or st.session_state.get("sport") not in _SPORT_ORDER:
+    st.session_state["sport"] = "NFL"
+st.sidebar.caption("Sport")
+_sport_cols = st.sidebar.columns(len(_SPORT_ORDER))
+for _i, _s in enumerate(_SPORT_ORDER):
+    with _sport_cols[_i]:
+        _selected = st.session_state["sport"] == _s
+        if st.button(
+            _s,
+            key=f"sport_btn_{_s}",
+            type="primary" if _selected else "secondary",
+            use_container_width=True,
+        ):
+            if not _selected:
+                st.session_state["sport"] = _s
+                st.rerun()
+sport = st.session_state["sport"]
 
 # ------------------------------------------------------------------
 # Auto-load precomputed defaults when sport changes (or on first load)
@@ -255,6 +372,12 @@ else:
     simulate_from = None
 st.session_state["simulate_from"] = simulate_from
 
+apply_regression = st.sidebar.checkbox(
+    "Apply regression to mean",
+    value=True,
+    help="Pull ratings toward the league mean after ranking / between seasons.",
+)
+
 # Clarify the full warm-up window (from … through year before target)
 if simulate_from and season:
     try:
@@ -280,7 +403,48 @@ try:
     _lock = describe_target_season_lock(sport, season)
     st.sidebar.caption(format_lock_line(sport, season, _lock))
 except Exception:
-    pass
+    _lock = None
+
+st.sidebar.subheader("Live Slate")
+_slate_meta = None
+try:
+    _slate_meta = read_slate_status(sport, season)
+except Exception:
+    _slate_meta = None
+if _slate_meta and _slate_meta.get("fetched_at"):
+    st.sidebar.caption(f"Scores as of {_slate_meta['fetched_at']}")
+refresh_slate = st.sidebar.button(
+    "Refresh live slate",
+    help="Pull completed games (NFL: nflverse, NHL: NHL API, NBA: BALLDONTLIE) and write scores into the season CSV. Locked games stay fixed in the next Monte Carlo run.",
+)
+if refresh_slate:
+    with st.sidebar.status("Refreshing live slate...", expanded=True) as slate_status:
+        try:
+            _report = update_season_scores(sport, season)
+            st.session_state["slate_report"] = _report.to_dict()
+            if _report.error:
+                slate_status.update(label=f"Slate refresh failed: {_report.error}", state="error")
+            else:
+                slate_status.update(
+                    label=(
+                        f"{_report.lock_line()} · "
+                        f"{_report.updated} newly locked"
+                    ),
+                    state="complete",
+                )
+                if _report.updated:
+                    st.session_state["is_default_run"] = False
+                    st.sidebar.info(
+                        "New results are on the slate. Click **Run Simulation** "
+                        "to update playoff odds from the locked games."
+                    )
+        except Exception as _slate_err:
+            st.session_state["slate_report"] = {
+                "sport": sport,
+                "season": str(season),
+                "error": str(_slate_err),
+            }
+            slate_status.update(label=f"Slate refresh failed: {_slate_err}", state="error")
 
 st.sidebar.divider()
 st.sidebar.subheader("Parameters")
@@ -292,11 +456,6 @@ margin_of_victory = st.sidebar.checkbox(
          "Off = update depends only on win/loss.",
 )
 elevation = st.sidebar.checkbox("Elevation Edge", value=False)
-apply_regression = st.sidebar.checkbox(
-    "Apply regression to mean",
-    value=True,
-    help="Pull ratings toward the league mean after ranking / between seasons.",
-)
 
 st.sidebar.divider()
 
@@ -537,6 +696,7 @@ if st.session_state.get("simulation_results") is not None:
 tabs = st.tabs([
     "Playoff Projections",
     "Regular Season Projections",
+    "Live Slate",
     "Model Comparison",
 ])
 
@@ -547,10 +707,22 @@ with tabs[0]:
             "Showing precomputed default simulation. "
             "Click **Run Simulation** in the sidebar to re-run with your current settings."
         )
+    try:
+        _tab_lock = describe_target_season_lock(sport, season)
+        if _tab_lock and int(_tab_lock.get("n_locked") or 0) > 0:
+            st.caption(
+                f"{format_lock_line(sport, season, _tab_lock)}. "
+                "Locked games use real scores; remaining games are simulated."
+            )
+    except Exception:
+        pass
     render_simulation_tab(sport=sport)
 
 with tabs[1]:
     render_elo_evolution_tab(sport=sport)
 
 with tabs[2]:
+    render_live_slate_tab(sport=sport, season=season)
+
+with tabs[3]:
     render_evaluation_tab()
