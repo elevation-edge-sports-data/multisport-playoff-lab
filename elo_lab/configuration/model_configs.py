@@ -6,7 +6,7 @@ instantiate different Elo model variants.
 """
 
 # Default home-field adjustment value
-from ..adjustments.home_field import DEFAULT_HFA
+from ..adjustments import DEFAULT_HFA
 
 
 MODEL_CONFIGS = {

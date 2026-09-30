@@ -8,6 +8,8 @@ from __future__ import annotations
 import random
 from typing import Callable, Dict, List, Optional
 
+from elo_lab.engine import win_probability
+
 from .models import (
     GameResult,
     PlayoffResult,
@@ -16,11 +18,6 @@ from .models import (
     TeamStanding,
 )
 from .seeding import seed_nba_playoffs
-
-
-def elo_win_prob(home_elo: float, away_elo: float) -> float:
-    """Standard Elo expected-score formula."""
-    return 1.0 / (1.0 + 10 ** ((away_elo - home_elo) / 400.0))
 
 
 def simulate_nba_game(
@@ -33,7 +30,7 @@ def simulate_nba_game(
     """Simulate one NBA game (play-in or playoff)."""
     home_elo = elo_lookup.get(home_id, 1500.0) + home_advantage
     away_elo = elo_lookup.get(away_id, 1500.0)
-    p_home = elo_win_prob(home_elo, away_elo)
+    p_home = win_probability(home_elo, away_elo)
     winner = home_id if rng.random() < p_home else away_id
     return GameResult(
         home=home_id,

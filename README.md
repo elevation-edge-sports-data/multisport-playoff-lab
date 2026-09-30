@@ -6,16 +6,17 @@ Supports historical backtesting, Monte Carlo regular-season + full playoff-brack
 
 **Live dashboard**: [https://multisport-elo-lab.streamlit.app/](https://multisport-elo-lab.streamlit.app/)
 
-**Current version: 15.0**
+**Current version: 15.1**
 
 ---
 
-## Highlights (Version 15.0)
+## Highlights (Version 15.1)
 
 - **Live slate**: pull completed scores into the season CSV, then lock those games in Monte Carlo
-  - NFL: nflverse schedules · NHL: api-web.nhle.com · NBA: BALLDONTLIE (`BALLDONTLIE_API_KEY`)
+  - NFL: nflverse schedules · NHL: api-web.nhle.com · NBA: NBA CDN scoreboard + ESPN scoreboard fallback (no key)
 - Sidebar **Refresh live slate** plus a **Live Slate** tab (locked vs remaining games)
 - CLI: `python -m elo_lab.workflows.live_slate --sport NFL --season 2026`
+- CLI: `python -m elo_lab.workflows.live_slate --sport NBA --season 2026`
 
 ### From Version 14.0
 
@@ -95,6 +96,8 @@ Supports historical backtesting, Monte Carlo regular-season + full playoff-brack
 
 ## Core Architecture (stable since v5)
 
+The short map of the engine, config, workflows, playoffs, and dashboard is [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 The engine is the only component that orchestrates Elo execution. Everything else is configuration, reusable transformations, evaluation utilities, or workflow orchestration.
 
 Public engine API:
@@ -109,8 +112,8 @@ Model behavior is controlled entirely through declarative configuration. Adjustm
 
 ```
 elo_lab/
-├── engine/          # Execution engine (game lifecycle + orchestration)
-├── adjustments/     # Stateless transformations
+├── engine.py        # Elo kernel (probability, update, one game)
+├── adjustments.py   # Home field, margin of victory, Elevation Edge
 ├── configuration/   # Model and sport configurations
 ├── evaluation/      # Metrics and diagnostics
 ├── playoffs/        # Sport-specific playoff brackets (nfl / nhl / nba)
@@ -189,8 +192,8 @@ Users can selectively optimize any subset of enabled adjustments. The system run
 ## Quick Start
 
 ```bash
-git clone https://github.com/elevation-edge-sports-data/multisport-elo-lab.git
-cd multisport-elo-lab
+git clone https://github.com/elevation-edge-sports-data/multisport-playoff-lab.git
+cd multisport-playoff-lab
 pip install -r requirements.txt
 
 # optional – generate instant-default simulation files
@@ -208,7 +211,8 @@ streamlit run app/dashboard.py
 
 | Version | Focus |
 |---------|-------|
-| 15.0    | Live slate: nflverse / NHL official web API / balldontlie |
+| 15.1    | Keyless NBA live slate: NBA CDN + ESPN scoreboard fallback |
+| 15.0    | Live slate: nflverse / NHL official web API / NBA scoreboard |
 | 14.0    | Lock completed games in target-season Monte Carlo |
 | 5       | Canonical engine + declarative transformation pipeline |
 | 6       | Interactive Streamlit dashboard |

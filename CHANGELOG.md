@@ -2,13 +2,22 @@
 
 All notable changes to MultiSport Elo Lab are documented in this file.
 
+## Version 15.1 — Keyless NBA live slate
+
+### Changed
+- **NBA scores** come from the NBA CDN scoreboard `https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json` (today only). The ESPN public scoreboard is the per-date fallback. No API key.
+- Balldontlie removed from the ingest path.
+- NFL stays on nflverse. NHL stays on the official NHL web API.
+
+---
+
 ## Version 15.0 — Live slate (ingestion + UI)
 
 ### Added
 - **Score ingestion** (`elo_lab/workflows/live_slate.py`): write completed games into the existing per-season CSVs (`Pts` / `G` columns). Locked rows stay locked on the next Monte Carlo run.
   - **NFL**: nflverse `schedules` release (`games.csv`)
   - **NHL**: official web API `https://api-web.nhle.com/v1/score/{date}` (regular season + playoffs; preseason skipped)
-  - **NBA**: BALLDONTLIE `GET /nba/v1/games` — set `BALLDONTLIE_API_KEY`
+  - **NBA**: completed-game scores for the target season (keyed vendor removed in 15.1)
 - **CLI**: `python -m elo_lab.workflows.live_slate --sport NFL --season 2026` (or `--sport all` for the current target season of each league).
 - **Sidebar control**: **Refresh live slate** writes new scores, updates the lock line, and tells you to re-run simulation when the slate changed.
 - **Live Slate tab**: lock counts, recently locked games, next unlocked games, last-refresh timestamp.

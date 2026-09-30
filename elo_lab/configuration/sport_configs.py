@@ -5,7 +5,7 @@ Defines sport-specific runtime defaults such as data paths,
 initial Elo values, and default model selection.
 """
 
-from ..engine.constants import INITIAL_ELO
+from ..engine import INITIAL_ELO
 
 
 # ==========================================================

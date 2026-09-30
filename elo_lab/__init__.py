@@ -1,14 +1,14 @@
 """
 Elo Lab
 
-Version 15.0 — Live slate: ingest completed scores + lock UI
+Version 15.1 — Keyless NBA live slate (CDN + ESPN fallback)
 
 Public package interface.
 """
 
-from .engine.game_runner import run_game
+from .engine import run_game
 
-__version__ = "15.0"
+__version__ = "15.1"
 
 __all__ = [
     "run_game",

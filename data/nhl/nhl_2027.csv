@@ -1,9 +1,9 @@
-Date,Time,Visitor,G,Home,G,,Att.,LOG,Notes
-2026-09-29,8:00 PM,New York Rangers,,Boston Bruins,,,,,
-2026-09-29,5:00 PM,Florida Panthers,,Carolina Hurricanes,,,,,
-2026-09-29,10:00 PM,Vancouver Canucks,,Edmonton Oilers,,,,,
-2026-09-29,7:00 PM,Montreal Canadiens,,Toronto Maple Leafs,,,,,
-2026-09-29,10:30 PM,Chicago Blackhawks,,Vegas Golden Knights,,,,,
+Date,Time,Visitor,G,Home,G.1,Unnamed: 6,Att.,LOG,Notes
+2026-09-29,8:00 PM,New York Rangers,0.0,Boston Bruins,3.0,,,,
+2026-09-29,5:00 PM,Florida Panthers,1.0,Carolina Hurricanes,0.0,,,,
+2026-09-29,10:00 PM,Vancouver Canucks,6.0,Edmonton Oilers,5.0,,,,
+2026-09-29,7:00 PM,Montreal Canadiens,3.0,Toronto Maple Leafs,2.0,,,,
+2026-09-29,10:30 PM,Chicago Blackhawks,2.0,Vegas Golden Knights,5.0,,,,
 2026-09-30,10:00 PM,Los Angeles Kings,,Colorado Avalanche,,,,,
 2026-09-30,7:30 PM,Pittsburgh Penguins,,Philadelphia Flyers,,,,,
 2026-09-30,7:30 PM,New York Islanders,,Toronto Maple Leafs,,,,,

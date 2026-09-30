@@ -1,34 +1,4 @@
-"""
-MultiSport Elo Lab – Streamlit dashboard
-
-Version 15.0 — Live slate: ingest completed scores + lock UI
-
-  - NHL / NFL / NBA with full playoff-bracket simulation
-  - NBA 2026–27 regular-season schedule (upcoming season; blank scores)
-  - Warm-up Elo: actual regular-season + playoff results from user-chosen
-    "Simulate from" season through the season before target, then Monte Carlo
-    only the target season
-  - Default "Simulate from" is the previous season for all sports (latest form)
-  - Sidebar shows the full warm-up window (e.g. 2024–2026), not only the start year
-  - Simulatable seasons exclude the seed year (history only)
-  - Continuous Elevation Edge
-  - Sport-specific home advantage labels (ice / court / field)
-  - Log5 baseline + residual diagnostics + corrected baseline ladder
-  - Precomputed default simulations loaded instantly on sport change
-  - Sport-specific default parameters and warm-up aligned with generator
-  - MoneyPuck-inspired Playoff Odds table (logo + abbr, shaded probabilities, sortable)
-  - Playoff spirals (one per conference; metric dropdown; leader fills radius)
-      · Default radial metric = Make Playoffs
-      · Fixed-square figures; logos aligned to abbreviation rays, just beyond each wedge
-      · No spin; polar drag layers hidden; “max” tick label removed
-  - Playoff path bars (Color 1…5 palette)
-  - Distribution of wins/points box plot on Regular Season Projections tab
-  - Export Results as quiet text-style control
-  - Tabs: Playoff Projections (default) · Regular Season Projections · Live Slate · Model Comparison
-  - Numerical Monte Carlo progress bar (0% / 10% / … / 100%)
-  - Faster simulation: playoffs reuse primary Monte Carlo standings/Elo
-  - Live slate: nflverse + NHL API + BALLDONTLIE ingest, sidebar refresh, Live Slate tab
-"""
+"""Streamlit entry point. See CHANGELOG.md and docs/ARCHITECTURE.md."""
 
 from __future__ import annotations
 
@@ -193,7 +163,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("MultiSport Elo Lab")
-st.caption("NFL / NHL / NBA | Version 15.0")
+st.caption("NFL / NHL / NBA | Version 15.1")
 
 
 # ---------------------------------------------------------------------------
@@ -415,7 +385,7 @@ if _slate_meta and _slate_meta.get("fetched_at"):
     st.sidebar.caption(f"Scores as of {_slate_meta['fetched_at']}")
 refresh_slate = st.sidebar.button(
     "Refresh live slate",
-    help="Pull completed games (NFL: nflverse, NHL: NHL API, NBA: BALLDONTLIE) and write scores into the season CSV. Locked games stay fixed in the next Monte Carlo run.",
+    help="Pull completed games (NFL: nflverse, NHL: NHL API, NBA scores (CDN, ESPN fallback)) and write scores into the season CSV. Locked games stay fixed in the next Monte Carlo run.",
 )
 if refresh_slate:
     with st.sidebar.status("Refreshing live slate...", expanded=True) as slate_status:

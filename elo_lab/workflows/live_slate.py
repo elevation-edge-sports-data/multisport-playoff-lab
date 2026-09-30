@@ -1,16 +1,17 @@
 """
 Live slate: pull completed scores and lock them into the season CSV.
 
-v15.0 sources
+v15.1 sources
   NFL — nflverse schedules release (games.csv)
   NHL — official NHL web API (api-web.nhle.com)
-  NBA — BALLDONTLIE (api.balldontlie.io; free key via BALLDONTLIE_API_KEY)
+  NBA — NBA CDN today's scoreboard, then ESPN scoreboard by date (no key)
 
 Writes Pts / G columns on the existing per-season files so v14 lock logic
 can see real results.
 
 Usage:
     python -m elo_lab.workflows.live_slate --sport NFL --season 2026
+    python -m elo_lab.workflows.live_slate --sport NBA --season 2026
     python -m elo_lab.workflows.live_slate --sport all
 """
 
@@ -20,14 +21,13 @@ import argparse
 import csv
 import io
 import json
-import os
 import re
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import asdict, dataclass, field
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
@@ -52,9 +52,18 @@ NFLVERSE_SCHEDULES_CSV = (
     "https://github.com/nflverse/nflverse-data/releases/download/schedules/games.csv"
 )
 NHL_WEB_API = "https://api-web.nhle.com/v1"
-BALLDONTLIE_GAMES = "https://api.balldontlie.io/nba/v1/games"
+NBA_CDN_SCOREBOARD = (
+    "https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json"
+)
+ESPN_NBA_SCOREBOARD = (
+    "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard"
+)
+NBA_CDN_HEADERS = {
+    "Referer": "https://www.nba.com/",
+    "Origin": "https://www.nba.com",
+}
 
-# nflverse / NHL / BALLDONTLIE abbreviations that differ from dashboard metadata
+# Feed abbreviations that differ from dashboard metadata
 ABBR_ALIASES = {
     "NFL": {"LA": "LAR", "WSH": "WAS", "JAC": "JAX"},
     "NHL": {"SJ": "SJS", "NJ": "NJD", "TB": "TBL", "LA": "LAK", "UTAH": "UTA", "ARI": "UTA"},
@@ -64,7 +73,7 @@ ABBR_ALIASES = {
 DEFAULT_SOURCE = {
     "NFL": "nflverse",
     "NHL": "nhl-web-api",
-    "NBA": "balldontlie",
+    "NBA": "nba-cdn+espn",
 }
 
 NAME_ALIASES = {
@@ -212,22 +221,6 @@ def _full_team_name(sport: str, token: Any) -> str:
     return raw
 
 
-def _balldontlie_key() -> Optional[str]:
-    for name in ("BALLDONTLIE_API_KEY", "BALLDONTLIE_KEY"):
-        val = os.environ.get(name)
-        if val:
-            return val.strip()
-    try:
-        import streamlit as st
-        secrets = getattr(st, "secrets", {}) or {}
-        for name in ("BALLDONTLIE_API_KEY", "BALLDONTLIE_KEY"):
-            if name in secrets and secrets[name]:
-                return str(secrets[name]).strip()
-    except Exception:
-        pass
-    return None
-
-
 def _events_from_payload(payload: dict) -> List[dict]:
     content = payload.get("content", payload) if isinstance(payload, dict) else {}
     sb = content.get("sbData") or content.get("scoreboard") or content
@@ -304,7 +297,7 @@ def fetch_daily(sport: str, day: date) -> List[CompletedGame]:
     if sport_u == "NHL":
         return fetch_nhl_official_date(day)
     if sport_u == "NBA":
-        return fetch_balldontlie_dates([day], season=None)
+        return fetch_nba_scores([day])
     return []
 
 
@@ -411,73 +404,175 @@ def fetch_nhl_official_dates(days: Iterable[date]) -> List[CompletedGame]:
     return out
 
 
-def parse_balldontlie_games(payload: dict, season: Optional[int] = None) -> List[CompletedGame]:
-    games = []
-    for g in payload.get("data") or []:
-        status = str(g.get("status") or g.get("status_state") or "").lower()
-        if "final" not in status:
+def _nba_side_name(blob: dict) -> str:
+    tricode = str(blob.get("teamTricode") or blob.get("teamAbbrev") or "").strip()
+    named = _full_team_name("NBA", tricode) if tricode else ""
+    if named and named.upper() != tricode.upper():
+        return named
+    city = str(blob.get("teamCity") or "").strip()
+    team = str(blob.get("teamName") or "").strip()
+    if city and team:
+        return f"{city} {team}"
+    return named or tricode
+
+
+def _nba_game_is_final(game: dict) -> bool:
+    status = game.get("gameStatus")
+    try:
+        if int(status) == 3:
+            return True
+    except (TypeError, ValueError):
+        pass
+    return "final" in str(game.get("gameStatusText") or "").lower()
+
+
+def _iso_day(value: Any) -> Optional[str]:
+    text = str(value or "").strip()
+    if len(text) >= 10 and text[4] == "-" and text[7] == "-":
+        return text[:10]
+    return None
+
+
+def parse_nba_cdn_scoreboard(payload: dict) -> List[CompletedGame]:
+    """Finals from today's NBA CDN scoreboard. This feed is not a date archive."""
+    board = payload.get("scoreboard") if isinstance(payload, dict) else None
+    if not isinstance(board, dict):
+        board = {}
+    board_date = _iso_day(board.get("gameDate"))
+    games: List[CompletedGame] = []
+    for game in board.get("games") or []:
+        if not isinstance(game, dict) or not _nba_game_is_final(game):
             continue
-        vs = g.get("visitor_team_score", g.get("away_score"))
-        hs = g.get("home_team_score", g.get("home_score"))
+        away = game.get("awayTeam") or {}
+        home = game.get("homeTeam") or {}
         try:
-            away_score = float(vs)
-            home_score = float(hs)
+            away_score = float(away.get("score"))
+            home_score = float(home.get("score"))
         except (TypeError, ValueError):
             continue
-        visitor = g.get("visitor_team") or {}
-        home = g.get("home_team") or {}
-        away_name = visitor.get("full_name") or _full_team_name("NBA", visitor.get("abbreviation"))
-        home_name = home.get("full_name") or _full_team_name("NBA", home.get("abbreviation"))
+        game_date = (
+            _iso_day(game.get("gameDate"))
+            or _iso_day(game.get("gameTimeUTC"))
+            or _iso_day(game.get("gameEt"))
+            or board_date
+        )
         games.append(
             CompletedGame(
                 sport="NBA",
-                away=away_name,
-                home=home_name,
+                away=_nba_side_name(away),
+                home=_nba_side_name(home),
                 away_score=away_score,
                 home_score=home_score,
-                date=str(g.get("date") or "")[:10] or None,
+                date=game_date,
                 status="final",
             )
         )
     return games
 
 
-def fetch_balldontlie_dates(days: List[date], season: Optional[int]) -> List[CompletedGame]:
-    key = _balldontlie_key()
-    if not key:
-        raise RuntimeError(
-            "NBA live slate needs BALLDONTLIE_API_KEY "
-            "(free key at https://balldontlie.io)."
-        )
-    headers = {"Authorization": key}
-    games: List[CompletedGame] = []
-    # Prefer date filters when we have a short list; otherwise page the season.
-    if days and len(days) <= 30:
-        for day in days:
-            params = {"dates[]": day.isoformat(), "per_page": 100}
-            url = BALLDONTLIE_GAMES + "?" + urllib.parse.urlencode(params)
-            payload = _http_json(url, headers=headers)
-            games.extend(parse_balldontlie_games(payload, season=season))
-            time.sleep(0.12)
-        return games
+def fetch_nba_cdn_today() -> List[CompletedGame]:
+    payload = _http_json(NBA_CDN_SCOREBOARD, headers=NBA_CDN_HEADERS)
+    return parse_nba_cdn_scoreboard(payload)
 
-    cursor = None
-    for _ in range(40):
-        params = {"per_page": 100}
-        if season is not None:
-            params["seasons[]"] = str(season)
-        if cursor is not None:
-            params["cursor"] = str(cursor)
-        url = BALLDONTLIE_GAMES + "?" + urllib.parse.urlencode(params)
-        payload = _http_json(url, headers=headers)
-        games.extend(parse_balldontlie_games(payload, season=season))
-        meta = payload.get("meta") or {}
-        nxt = meta.get("next_cursor") or meta.get("next")
-        if not nxt:
-            break
-        cursor = nxt
-        time.sleep(0.12)
-    return games
+
+def fetch_espn_nba_dates(days: List[date]) -> List[CompletedGame]:
+    """ESPN public scoreboard, one date at a time. A bad date is skipped."""
+    out: List[CompletedGame] = []
+    for day in days:
+        url = ESPN_NBA_SCOREBOARD + "?" + urllib.parse.urlencode(
+            {"dates": day.strftime("%Y%m%d")}
+        )
+        try:
+            payload = _http_json(url)
+            out.extend(parse_espn_events("NBA", payload))
+        except (
+            urllib.error.URLError,
+            urllib.error.HTTPError,
+            TimeoutError,
+            json.JSONDecodeError,
+            ValueError,
+            OSError,
+        ):
+            pass
+        time.sleep(0.1)
+    return out
+
+
+def _nba_keep_cdn_game(game: CompletedGame, days: List[date], today: date) -> bool:
+    raw = _iso_day(game.date)
+    if raw is None:
+        return False
+    try:
+        played = datetime.strptime(raw, "%Y-%m-%d").date()
+    except ValueError:
+        return False
+    allowed = set(days)
+    allowed.add(today)
+    allowed.add(today - timedelta(days=1))
+    return played in allowed
+
+
+def _nba_dedupe_key(game: CompletedGame) -> tuple:
+    return ((game.date or "")[:10], _norm_name(game.away), _norm_name(game.home))
+
+
+def fetch_nba_scores(days: List[date]) -> List[CompletedGame]:
+    """CDN today, then ESPN for pending dates. No keys. Empty feeds return []."""
+    today = datetime.now(timezone.utc).date()
+    cdn_games: List[CompletedGame] = []
+    try:
+        cdn_games = [
+            game
+            for game in fetch_nba_cdn_today()
+            if _nba_keep_cdn_game(game, days, today)
+        ]
+    except (
+        urllib.error.URLError,
+        urllib.error.HTTPError,
+        TimeoutError,
+        json.JSONDecodeError,
+        ValueError,
+        OSError,
+    ):
+        cdn_games = []
+
+    espn_games: List[CompletedGame] = []
+    if days:
+        try:
+            espn_games = fetch_espn_nba_dates(list(days))
+        except (
+            urllib.error.URLError,
+            urllib.error.HTTPError,
+            TimeoutError,
+            json.JSONDecodeError,
+            ValueError,
+            OSError,
+        ):
+            espn_games = []
+
+    seen = set()
+    out: List[CompletedGame] = []
+    espn_contributed = False
+    for game in list(cdn_games) + list(espn_games):
+        key = _nba_dedupe_key(game)
+        if key in seen:
+            continue
+        seen.add(key)
+        if game not in cdn_games:
+            espn_contributed = True
+        out.append(game)
+    if cdn_games and espn_contributed:
+        fetch_nba_scores.last_source = "nba-cdn+espn"
+    elif espn_contributed:
+        fetch_nba_scores.last_source = "espn"
+    elif cdn_games:
+        fetch_nba_scores.last_source = "nba-cdn"
+    else:
+        fetch_nba_scores.last_source = "nba-cdn+espn"
+    return out
+
+
+fetch_nba_scores.last_source = "nba-cdn+espn"
 
 
 def detect_schema(df: pd.DataFrame) -> dict:
@@ -686,14 +781,7 @@ def fetch_completed_for_csv(sport: str, season: str, df: pd.DataFrame) -> List[C
         return fetch_nhl_official_dates(pending_days)
 
     if sport_u == "NBA":
-        # File suffix 2027 means 2026-27; BALLDONTLIE season is the start year.
-        year = int(str(season)[:4])
-        bdl_season = year if year < 2020 else (year - 1 if year >= 2027 else year)
-        # nba_2027.csv starts Oct 2026 → season 2026
-        if year >= 2023:
-            # convention in this repo: nba_YYYY is the season ending in YYYY
-            bdl_season = year - 1
-        return fetch_balldontlie_dates(pending_days, season=bdl_season)
+        return fetch_nba_scores(pending_days)
 
     return []
 
@@ -724,6 +812,8 @@ def update_season_scores(
     except Exception as exc:
         report.error = str(exc)
         fetched = []
+    if sport.upper() == "NBA" and games is None:
+        report.source = getattr(fetch_nba_scores, "last_source", None) or report.source
     report.fetched = len(fetched)
     updated_df, applied, unmatched, already = apply_completed_games(
         df, fetched, overwrite=overwrite
@@ -801,7 +891,19 @@ def update_all_current(root: Path = ROOT, dry_run: bool = False) -> List[SlateRe
         season = default_target_season(sport)
         if not season:
             continue
-        reports.append(update_season_scores(sport, season, root=root, dry_run=dry_run))
+        try:
+            reports.append(update_season_scores(sport, season, root=root, dry_run=dry_run))
+        except Exception as exc:
+            reports.append(
+                SlateReport(
+                    sport=sport,
+                    season=str(season),
+                    path="",
+                    fetched_at=_now_iso(),
+                    source=DEFAULT_SOURCE.get(sport, ""),
+                    error=str(exc),
+                )
+            )
     return reports
 
 
@@ -852,9 +954,14 @@ def main(argv: Optional[List[str]] = None) -> int:
             print(f"{sport}: no season file found")
             code = 1
             continue
-        report = update_season_scores(
-            sport, season, overwrite=args.overwrite, dry_run=args.dry_run
-        )
+        try:
+            report = update_season_scores(
+                sport, season, overwrite=args.overwrite, dry_run=args.dry_run
+            )
+        except Exception as exc:
+            print(f"{sport}: {exc}")
+            code = 1
+            continue
         print(report.lock_line())
         print(
             f"  fetched={report.fetched} updated={report.updated} "

@@ -16,8 +16,10 @@ from elo_lab.workflows.live_slate import (
     CompletedGame,
     apply_completed_games,
     detect_schema,
-    parse_balldontlie_games,
+    fetch_completed_for_csv,
+    fetch_nba_scores,
     parse_espn_events,
+    parse_nba_cdn_scoreboard,
     parse_nflverse_rows,
     parse_nhl_score_payload,
     update_season_scores,
@@ -207,30 +209,167 @@ def test_parse_nhl_official_skips_preseason_and_unplayed():
     assert games[0].away_score == 3
 
 
-def test_parse_balldontlie_finals_only():
+def test_parse_nba_cdn_finals_only():
     payload = {
-        "data": [
+        "scoreboard": {
+            "gameDate": "2025-10-21",
+            "games": [
+                {
+                    "gameStatus": 3,
+                    "gameStatusText": "Final",
+                    "awayTeam": {
+                        "teamTricode": "HOU",
+                        "teamCity": "Houston",
+                        "teamName": "Rockets",
+                        "score": 124,
+                    },
+                    "homeTeam": {
+                        "teamTricode": "OKC",
+                        "teamCity": "Oklahoma City",
+                        "teamName": "Thunder",
+                        "score": 125,
+                    },
+                },
+                {
+                    "gameStatus": 2,
+                    "gameStatusText": "Q3 5:12",
+                    "awayTeam": {
+                        "teamTricode": "DET",
+                        "teamCity": "Detroit",
+                        "teamName": "Pistons",
+                        "score": 70,
+                    },
+                    "homeTeam": {
+                        "teamTricode": "BOS",
+                        "teamCity": "Boston",
+                        "teamName": "Celtics",
+                        "score": 80,
+                    },
+                },
+            ],
+        }
+    }
+    games = parse_nba_cdn_scoreboard(payload)
+    assert len(games) == 1
+    assert games[0].away == "Houston Rockets"
+    assert games[0].home == "Oklahoma City Thunder"
+    assert games[0].home_score == 125
+    assert games[0].date == "2025-10-21"
+
+
+def test_parse_espn_nba_final_only():
+    payload = {
+        "events": [
             {
-                "status": "Final",
-                "visitor_team_score": 124,
-                "home_team_score": 125,
-                "date": "2025-10-21",
-                "visitor_team": {"full_name": "Houston Rockets", "abbreviation": "HOU"},
-                "home_team": {"full_name": "Oklahoma City Thunder", "abbreviation": "OKC"},
+                "date": "2025-10-21T02:00Z",
+                "competitions": [
+                    {
+                        "status": {
+                            "type": {
+                                "completed": True,
+                                "state": "post",
+                                "name": "STATUS_FINAL",
+                            }
+                        },
+                        "competitors": [
+                            {
+                                "homeAway": "home",
+                                "score": "125",
+                                "team": {"displayName": "Oklahoma City Thunder"},
+                            },
+                            {
+                                "homeAway": "away",
+                                "score": "124",
+                                "team": {"displayName": "Houston Rockets"},
+                            },
+                        ],
+                    }
+                ],
             },
             {
-                "status": "1st Qtr",
-                "visitor_team_score": 20,
-                "home_team_score": 18,
-                "visitor_team": {"full_name": "Boston Celtics"},
-                "home_team": {"full_name": "Detroit Pistons"},
+                "date": "2025-10-22T00:00Z",
+                "competitions": [
+                    {
+                        "status": {
+                            "type": {
+                                "completed": False,
+                                "state": "in",
+                                "name": "STATUS_IN_PROGRESS",
+                            }
+                        },
+                        "competitors": [
+                            {
+                                "homeAway": "home",
+                                "score": "40",
+                                "team": {"displayName": "Boston Celtics"},
+                            },
+                            {
+                                "homeAway": "away",
+                                "score": "38",
+                                "team": {"displayName": "Detroit Pistons"},
+                            },
+                        ],
+                    }
+                ],
             },
         ]
     }
-    games = parse_balldontlie_games(payload)
+    games = parse_espn_events("NBA", payload)
     assert len(games) == 1
     assert games[0].away == "Houston Rockets"
     assert games[0].home_score == 125
+
+
+def test_fetch_nba_scores_uses_espn_when_cdn_fails(monkeypatch):
+    import urllib.error
+    from datetime import date
+
+    from elo_lab.workflows import live_slate as live_slate_mod
+
+    def _cdn_down():
+        raise urllib.error.URLError("cdn unavailable")
+
+    final = CompletedGame(
+        "NBA",
+        "Houston Rockets",
+        "Oklahoma City Thunder",
+        124,
+        125,
+        date="2025-10-21",
+    )
+    monkeypatch.setattr(live_slate_mod, "fetch_nba_cdn_today", _cdn_down)
+    monkeypatch.setattr(live_slate_mod, "fetch_espn_nba_dates", lambda days: [final])
+
+    games = fetch_nba_scores([date(2025, 10, 21)])
+    assert len(games) == 1
+    assert games[0].away == "Houston Rockets"
+    assert games[0].home_score == 125
+    assert "key" not in (live_slate_mod.fetch_nba_scores.last_source or "").lower()
+
+
+def test_nba_refresh_does_not_require_env_key(monkeypatch):
+    from elo_lab.workflows import live_slate as live_slate_mod
+
+    assert not hasattr(live_slate_mod, "_balldontlie_key")
+
+    def _no_network(*_args, **_kwargs):
+        raise AssertionError("unit test must not hit the network")
+
+    monkeypatch.setattr(live_slate_mod, "_http_json", _no_network)
+    monkeypatch.setattr(live_slate_mod, "fetch_nba_cdn_today", lambda: [])
+    monkeypatch.setattr(live_slate_mod, "fetch_espn_nba_dates", lambda days: [])
+
+    df = pd.DataFrame(
+        {
+            "Date": ["2025-10-21"],
+            "Visitor/Neutral": ["Houston Rockets"],
+            "PTS": [pd.NA],
+            "Home/Neutral": ["Oklahoma City Thunder"],
+            "PTS.1": [pd.NA],
+        }
+    )
+    games = fetch_completed_for_csv("NBA", "2026", df)
+    assert games == []
 
 
 def test_update_season_scores_writes_csv():

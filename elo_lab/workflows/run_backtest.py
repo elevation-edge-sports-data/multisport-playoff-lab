@@ -15,9 +15,8 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from elo_lab.engine.game_runner import run_game
+from elo_lab.engine import INITIAL_ELO, run_game
 from elo_lab.configuration.model_configs import MODEL_CONFIGS, AVAILABLE_MODELS
-from elo_lab.engine.constants import INITIAL_ELO
 
 os.makedirs("outputs", exist_ok=True)
 

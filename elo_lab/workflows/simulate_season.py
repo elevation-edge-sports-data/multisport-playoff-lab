@@ -18,22 +18,18 @@ import pandas as pd
 import numpy as np
 
 try:
-    from elo_lab.engine.game_runner import run_game
-    from elo_lab.engine.pregame import compute_pregame
+    from elo_lab.engine import compute_pregame, run_game
 except ImportError:
-    try:
-        from elo_lab.engine import run_game, compute_pregame
-    except ImportError:
-        def compute_pregame(home_elo, away_elo, context, config):
-            diff = home_elo - away_elo
-            return {"p_home": 1.0 / (1.0 + 10 ** (-diff / 400.0))}
+    def compute_pregame(home_elo, away_elo, context, config):
+        diff = home_elo - away_elo
+        return {"p_home": 1.0 / (1.0 + 10 ** (-diff / 400.0))}
 
-        def run_game(home_elo, away_elo, context, config):
-            k = (config or {}).get("k", 20)
-            actual = context.get("actual", 0)
-            p_home = 1.0 / (1.0 + 10 ** (-(home_elo - away_elo) / 400.0))
-            delta = k * (actual - p_home)
-            return {"home_elo_post": home_elo + delta, "away_elo_post": away_elo - delta}
+    def run_game(home_elo, away_elo, context, config):
+        k = (config or {}).get("k", 20)
+        actual = context.get("actual", 0)
+        p_home = 1.0 / (1.0 + 10 ** (-(home_elo - away_elo) / 400.0))
+        delta = k * (actual - p_home)
+        return {"home_elo_post": home_elo + delta, "away_elo_post": away_elo - delta}
 
 
 # ==================== SPORT CONFIG ====================
