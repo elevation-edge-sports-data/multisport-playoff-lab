@@ -30,7 +30,11 @@ from elo_lab.workflows.simulate_season import (
     describe_target_season_lock,
     format_lock_line,
 )
-from elo_lab.workflows.live_slate import update_season_scores, read_slate_status
+from elo_lab.workflows.live_slate import (
+    read_slate_status,
+    season_overrides_for_refresh,
+    update_all_current,
+)
 
 # Clean metadata API (single source of truth for teams + venues)
 from metadata import NFL_TEAMS, NHL_TEAMS, NBA_TEAMS, get_sport_teams, load_teams
@@ -385,36 +389,74 @@ if _slate_meta and _slate_meta.get("fetched_at"):
     st.sidebar.caption(f"Scores as of {_slate_meta['fetched_at']}")
 refresh_slate = st.sidebar.button(
     "Refresh live slate",
-    help="Pull completed games (NFL: nflverse, NHL: NHL API, NBA scores (CDN, ESPN fallback)) and write scores into the season CSV. Locked games stay fixed in the next Monte Carlo run.",
+    help=(
+        "Pull completed games for NFL, NHL, and NBA "
+        "(nflverse, NHL API, NBA CDN with ESPN fallback) "
+        "and write each into that sport's season CSV. "
+        "Locked games stay fixed on the next Monte Carlo run."
+    ),
 )
+_slate_any_updated = False
 if refresh_slate:
     with st.sidebar.status("Refreshing live slate...", expanded=True) as slate_status:
         try:
-            _report = update_season_scores(sport, season)
-            st.session_state["slate_report"] = _report.to_dict()
-            if _report.error:
-                slate_status.update(label=f"Slate refresh failed: {_report.error}", state="error")
+            _remembered = st.session_state.get("seasons_by_sport")
+            if not isinstance(_remembered, dict):
+                _remembered = None
+            _reports = update_all_current(
+                seasons=season_overrides_for_refresh(sport, season, _remembered)
+            )
+            _by_sport = {
+                **dict(st.session_state.get("slate_reports") or {}),
+                **{r.sport: r.to_dict() for r in _reports},
+            }
+            st.session_state["slate_reports"] = _by_sport
+            if sport.upper() in _by_sport:
+                st.session_state["slate_report"] = _by_sport[sport.upper()]
+            _slate_any_updated = any(bool(r.updated) for r in _reports)
+            if _slate_any_updated:
+                st.session_state["is_default_run"] = False
+            for _line in _reports:
+                st.markdown(_line.feedback_line().replace("_", r"\_"))
+            _failed = [r.sport for r in _reports if r.error]
+            if not _reports:
+                slate_status.update(
+                    label="Slate refresh failed",
+                    state="error",
+                    expanded=True,
+                )
+            elif _failed:
+                slate_status.update(
+                    label=f"{', '.join(_failed)} failed",
+                    state="error",
+                    expanded=True,
+                )
             else:
                 slate_status.update(
-                    label=(
-                        f"{_report.lock_line()} · "
-                        f"{_report.updated} newly locked"
-                    ),
+                    label="Refreshed NFL, NHL, and NBA",
                     state="complete",
+                    expanded=True,
                 )
-                if _report.updated:
-                    st.session_state["is_default_run"] = False
-                    st.sidebar.info(
-                        "New results are on the slate. Click **Run Simulation** "
-                        "to update playoff odds from the locked games."
-                    )
         except Exception as _slate_err:
-            st.session_state["slate_report"] = {
+            _err_report = {
                 "sport": sport,
                 "season": str(season),
                 "error": str(_slate_err),
             }
-            slate_status.update(label=f"Slate refresh failed: {_slate_err}", state="error")
+            _saved = dict(st.session_state.get("slate_reports") or {})
+            _saved[str(sport).upper()] = _err_report
+            st.session_state["slate_reports"] = _saved
+            st.session_state["slate_report"] = _err_report
+            slate_status.update(
+                label=f"Slate refresh failed: {_slate_err}",
+                state="error",
+                expanded=True,
+            )
+if _slate_any_updated:
+    st.sidebar.info(
+        "New results are on the slate. Click **Run Simulation** "
+        "to update playoff odds for the sport you then simulate."
+    )
 
 st.sidebar.divider()
 st.sidebar.subheader("Parameters")
@@ -663,6 +705,10 @@ if st.session_state.get("simulation_results") is not None:
 # we accepted first-tab default = Regular. Instead we put Playoff first so the
 # app lands on the primary fan-facing view.
 # ---------------------------------------------------------------------------
+_saved_reports = st.session_state.get("slate_reports") or {}
+if isinstance(_saved_reports, dict) and sport.upper() in _saved_reports:
+    st.session_state["slate_report"] = _saved_reports[sport.upper()]
+
 tabs = st.tabs([
     "Playoff Projections",
     "Regular Season Projections",

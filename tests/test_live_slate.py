@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+import tempfile
 from pathlib import Path
 
 import pandas as pd
@@ -14,6 +15,7 @@ if str(ROOT) not in sys.path:
 
 from elo_lab.workflows.live_slate import (
     CompletedGame,
+    SlateReport,
     apply_completed_games,
     detect_schema,
     fetch_completed_for_csv,
@@ -22,6 +24,8 @@ from elo_lab.workflows.live_slate import (
     parse_nba_cdn_scoreboard,
     parse_nflverse_rows,
     parse_nhl_score_payload,
+    season_overrides_for_refresh,
+    update_all_current,
     update_season_scores,
 )
 from elo_lab.workflows.simulate_season import describe_schedule_lock, normalize_schedule
@@ -397,3 +401,172 @@ def test_update_season_scores_writes_csv():
             assert status["NFL:2026"]["n_locked"] == 1
         finally:
             live_slate_mod.SLATE_STATUS_PATH = original_status
+
+
+def test_feedback_line_lists_lock_and_newly_locked():
+    report = SlateReport(
+        sport="NFL",
+        season="2026",
+        path="",
+        updated=2,
+        n_games=272,
+        n_locked=16,
+        status="in_progress",
+    )
+    assert (
+        report.feedback_line()
+        == "NFL 2026 · in progress · 16/272 games locked · 2 newly locked"
+    )
+    report.error = "feed down"
+    assert report.feedback_line().endswith("· feed down")
+
+
+def test_season_overrides_keep_each_sport_on_its_own_season():
+    assert season_overrides_for_refresh("NFL", "2026", None) == {"NFL": "2026"}
+    mixed = season_overrides_for_refresh(
+        "nhl",
+        "2026",
+        {"NFL": "2025", "NBA": "2027", "NHL": "1999"},
+    )
+    assert mixed == {"NHL": "2026", "NFL": "2025", "NBA": "2027"}
+    active_only = season_overrides_for_refresh("NFL", "2026", {"NFL": "2024"})
+    assert active_only == {"NFL": "2026"}
+
+
+def _write_mini_slate(root: Path, sport: str, season: str, scored: bool = False) -> Path:
+    data_dir = root / "data" / sport.lower()
+    data_dir.mkdir(parents=True, exist_ok=True)
+    frame = _nfl_upcoming()
+    if scored:
+        frame.loc[0, "Pts"] = 10
+        frame.loc[0, "Pts.1"] = 13
+    path = data_dir / f"{sport.lower()}_{season}.csv"
+    frame.to_csv(path, index=False)
+    return path
+
+
+def test_update_all_current_refreshes_each_sport_on_its_own_season(monkeypatch):
+    from elo_lab.workflows import live_slate as live_slate_mod
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        nfl_path = _write_mini_slate(tmp_path, "NFL", "2026")
+        nhl_path = _write_mini_slate(tmp_path, "NHL", "2027", scored=True)
+        _write_mini_slate(tmp_path, "NBA", "2027")
+        original_status = live_slate_mod.SLATE_STATUS_PATH
+        live_slate_mod.SLATE_STATUS_PATH = tmp_path / "data" / "slate_status.json"
+
+        def fake_default(sport):
+            return {"NFL": "1999", "NHL": "2027", "NBA": "2027"}[sport.upper()]
+
+        def fake_fetch(sport, season, df):
+            sport_u = sport.upper()
+            if sport_u == "NBA":
+                raise RuntimeError("nba feed down")
+            if sport_u == "NFL":
+                return [
+                    CompletedGame(
+                        "NFL", "New England Patriots", "Seattle Seahawks", 10, 13, week=1
+                    )
+                ]
+            if sport_u == "NHL":
+                return [
+                    CompletedGame(
+                        "NHL", "New England Patriots", "Seattle Seahawks", 99, 99, week=1
+                    )
+                ]
+            return []
+
+        monkeypatch.setattr(live_slate_mod, "default_target_season", fake_default)
+        monkeypatch.setattr(live_slate_mod, "fetch_completed_for_csv", fake_fetch)
+        try:
+            reports = update_all_current(root=tmp_path, seasons={"NFL": "2026"})
+        finally:
+            live_slate_mod.SLATE_STATUS_PATH = original_status
+
+        assert [r.sport for r in reports] == ["NFL", "NHL", "NBA"]
+        assert [r.season for r in reports] == ["2026", "2027", "2027"]
+        assert reports[0].error is None
+        assert reports[0].updated == 1
+        assert (
+            reports[0].feedback_line()
+            == "NFL 2026 · in progress · 1/3 games locked · 1 newly locked"
+        )
+        written = pd.read_csv(nfl_path)
+        assert float(written.loc[0, "Pts"]) == 10
+        assert reports[1].error is None
+        assert reports[1].updated == 0
+        nhl_written = pd.read_csv(nhl_path)
+        assert float(nhl_written.loc[0, "Pts"]) == 10
+        assert reports[2].error == "nba feed down"
+        assert "nba feed down" in reports[2].feedback_line()
+
+
+def test_update_all_current_one_failure_does_not_abort(monkeypatch):
+    from elo_lab.workflows import live_slate as live_slate_mod
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        for sport, season in (("NFL", "2026"), ("NHL", "2027"), ("NBA", "2027")):
+            _write_mini_slate(tmp_path, sport, season)
+        original_status = live_slate_mod.SLATE_STATUS_PATH
+        live_slate_mod.SLATE_STATUS_PATH = tmp_path / "data" / "slate_status.json"
+        calls = []
+        real = live_slate_mod.update_season_scores
+
+        def wrapped(sport, season, root=live_slate_mod.ROOT, overwrite=False, dry_run=False, games=None):
+            calls.append((sport.upper(), overwrite))
+            if sport.upper() == "NHL":
+                raise RuntimeError("nhl down")
+            return real(
+                sport,
+                season,
+                root=root,
+                overwrite=overwrite,
+                dry_run=dry_run,
+                games=[] if games is None else games,
+            )
+
+        monkeypatch.setattr(live_slate_mod, "update_season_scores", wrapped)
+        try:
+            reports = update_all_current(
+                root=tmp_path,
+                seasons={"NFL": "2026", "NHL": "2027", "NBA": "2027"},
+            )
+        finally:
+            live_slate_mod.SLATE_STATUS_PATH = original_status
+
+        assert [r.sport for r in reports] == ["NFL", "NHL", "NBA"]
+        assert calls == [("NFL", False), ("NHL", False), ("NBA", False)]
+        assert reports[0].error is None
+        assert reports[1].error == "nhl down"
+        assert reports[2].error is None
+
+
+def test_update_all_current_missing_season_is_an_error_report(monkeypatch):
+    from elo_lab.workflows import live_slate as live_slate_mod
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        _write_mini_slate(tmp_path, "NFL", "2026")
+        _write_mini_slate(tmp_path, "NHL", "2027")
+        original_status = live_slate_mod.SLATE_STATUS_PATH
+        live_slate_mod.SLATE_STATUS_PATH = tmp_path / "data" / "slate_status.json"
+
+        def fake_default(sport):
+            if sport.upper() == "NBA":
+                return None
+            return {"NFL": "2026", "NHL": "2027"}[sport.upper()]
+
+        monkeypatch.setattr(live_slate_mod, "default_target_season", fake_default)
+        monkeypatch.setattr(live_slate_mod, "fetch_completed_for_csv", lambda *args, **kwargs: [])
+        try:
+            reports = update_all_current(root=tmp_path)
+        finally:
+            live_slate_mod.SLATE_STATUS_PATH = original_status
+
+        assert [r.sport for r in reports] == ["NFL", "NHL", "NBA"]
+        assert reports[0].error is None
+        assert reports[1].error is None
+        assert reports[2].error == "No season file for NBA"
+        assert reports[2].feedback_line() == "NBA · No season file for NBA"

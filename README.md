@@ -14,7 +14,7 @@ Supports historical backtesting, Monte Carlo regular-season + full playoff-brack
 
 - **Live slate**: pull completed scores into the season CSV, then lock those games in Monte Carlo
   - NFL: nflverse schedules · NHL: api-web.nhle.com · NBA: NBA CDN scoreboard + ESPN scoreboard fallback (no key)
-- Sidebar **Refresh live slate** plus a **Live Slate** tab (locked vs remaining games)
+- Sidebar **Refresh live slate** refreshes NFL, NHL, and NBA in one click, plus a **Live Slate** tab (locked vs remaining games)
 - CLI: `python -m elo_lab.workflows.live_slate --sport NFL --season 2026`
 - CLI: `python -m elo_lab.workflows.live_slate --sport NBA --season 2026`
 
@@ -88,7 +88,7 @@ Supports historical backtesting, Monte Carlo regular-season + full playoff-brack
 2. **Regular Season Projections**  
    Win/point distributions and Elo / win trajectories for the target season.
 3. **Live Slate**  
-   Locked vs remaining games after a score refresh. Use **Refresh live slate** in the sidebar, then **Run Simulation**.
+   Locked vs remaining games after a score refresh. **Refresh live slate** updates NFL, NHL, and NBA in one click. Then **Run Simulation** for the sport on screen.
 4. **Model Comparison**  
    Accuracy, Log Loss, Brier Score, calibration plots, residual diagnostics, expanded baselines (Always Home, Constant Home Rate, Coin Flip), Log5, and grid-search landscape.
 

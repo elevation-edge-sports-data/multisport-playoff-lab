@@ -5,6 +5,7 @@ All notable changes to MultiSport Elo Lab are documented in this file.
 ## Version 15.1 — Keyless NBA live slate
 
 ### Changed
+- Sidebar **Refresh live slate** now refreshes NFL, NHL, and NBA in one click.
 - **NBA scores** come from the NBA CDN scoreboard `https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json` (today only). The ESPN public scoreboard is the per-date fallback. No API key.
 - Balldontlie removed from the ingest path.
 - NFL stays on nflverse. NHL stays on the official NHL web API.

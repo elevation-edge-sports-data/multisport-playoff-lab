@@ -31,17 +31,41 @@ def render_live_slate_tab(sport: str = "NFL", season: str | None = None):
         "to fold new results into playoff odds."
     )
 
-    report = st.session_state.get("slate_report")
-    if report and str(report.get("sport")) == sport_u and str(report.get("season")) == str(season):
+    reports_by_sport = st.session_state.get("slate_reports") or {}
+    report = None
+    from_map = False
+    if isinstance(reports_by_sport, dict):
+        mapped = reports_by_sport.get(sport_u)
+        if isinstance(mapped, dict):
+            report = mapped
+            from_map = True
+    if report is None:
+        legacy = st.session_state.get("slate_report")
+        if isinstance(legacy, dict) and str(legacy.get("sport", "")).upper() == sport_u:
+            report = legacy
+
+    show_report = False
+    if isinstance(report, dict) and str(report.get("sport", "")).upper() == sport_u:
+        report_season = str(report.get("season") or "")
+        show_report = from_map or report_season == str(season)
+    if show_report:
         if report.get("error"):
             st.warning(f"Last refresh failed: {report['error']}")
         else:
+            when = report.get("fetched_at", "")
+            report_season = str(report.get("season") or "")
+            if report_season and report_season != str(season):
+                lead = f"Last refresh for {report_season} ({when})"
+            else:
+                lead = f"Last refresh {when}"
             st.success(
-                f"Last refresh {report.get('fetched_at', '')}: "
+                f"{lead}: "
                 f"{report.get('updated', 0)} newly locked · "
                 f"{report.get('already_locked', 0)} already on file · "
                 f"{report.get('fetched', 0)} completed games fetched"
             )
+    else:
+        report = None
 
     lock = None
     if describe_target_season_lock and season:

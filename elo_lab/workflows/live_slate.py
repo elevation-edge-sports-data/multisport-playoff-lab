@@ -132,6 +132,16 @@ class SlateReport:
             {"n_games": self.n_games, "n_locked": self.n_locked, "status": self.status},
         )
 
+    def feedback_line(self) -> str:
+        """One sidebar line: lock summary, newly locked count, and any error."""
+        if self.error and not self.n_games and not self.updated and not self.fetched:
+            season = f" {self.season}" if self.season else ""
+            return f"{self.sport}{season} · {self.error}"
+        line = f"{self.lock_line()} · {self.updated} newly locked"
+        if self.error:
+            return f"{line} · {self.error}"
+        return line
+
     def to_dict(self) -> dict:
         d = asdict(self)
         d["lock_line"] = self.lock_line()
@@ -885,20 +895,73 @@ def default_target_season(sport: str) -> Optional[str]:
     return None
 
 
-def update_all_current(root: Path = ROOT, dry_run: bool = False) -> List[SlateReport]:
-    reports = []
+def season_overrides_for_refresh(
+    active_sport: str,
+    active_season: Optional[str],
+    remembered: Optional[Dict[str, str]] = None,
+) -> Dict[str, str]:
+    """Season keys for an all-sports refresh.
+
+    The open sport uses the sidebar season. Each other sport uses its own
+    remembered season when one is stored. Sports with no entry are omitted
+    so ``update_all_current`` can apply that sport's target season.
+    """
+    active = str(active_sport or "").upper()
+    overrides: Dict[str, str] = {}
+    if active in ("NFL", "NHL", "NBA") and active_season:
+        overrides[active] = str(active_season)
+    if remembered:
+        for name, value in remembered.items():
+            key = str(name).upper()
+            if key not in ("NFL", "NHL", "NBA") or key == active or not value:
+                continue
+            overrides.setdefault(key, str(value))
+    return overrides
+
+
+def update_all_current(
+    root: Path = ROOT,
+    dry_run: bool = False,
+    seasons: Optional[Dict[str, Optional[str]]] = None,
+) -> List[SlateReport]:
+    """Refresh NFL, NHL, and NBA.
+
+    ``seasons`` overrides the season key per sport. Omitted sports use
+    ``default_target_season``. A sport with no season is reported with an
+    error and is not fetched. One failure does not stop the others.
+    Existing scores stay put; ``overwrite`` is not enabled here.
+    """
+    overrides: Dict[str, str] = {}
+    if seasons:
+        for key, value in seasons.items():
+            if value:
+                overrides[str(key).upper()] = str(value)
+
+    reports: List[SlateReport] = []
     for sport in ("NFL", "NHL", "NBA"):
-        season = default_target_season(sport)
+        season = overrides.get(sport) or default_target_season(sport)
         if not season:
+            reports.append(
+                SlateReport(
+                    sport=sport,
+                    season="",
+                    path="",
+                    fetched_at=_now_iso(),
+                    source=DEFAULT_SOURCE.get(sport, ""),
+                    error=f"No season file for {sport}",
+                )
+            )
             continue
         try:
-            reports.append(update_season_scores(sport, season, root=root, dry_run=dry_run))
+            reports.append(
+                update_season_scores(sport, season, root=root, dry_run=dry_run)
+            )
         except Exception as exc:
             reports.append(
                 SlateReport(
                     sport=sport,
                     season=str(season),
-                    path="",
+                    path=str(season_csv_path(sport, season, root=root)),
                     fetched_at=_now_iso(),
                     source=DEFAULT_SOURCE.get(sport, ""),
                     error=str(exc),
