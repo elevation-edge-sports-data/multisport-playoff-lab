@@ -17,6 +17,7 @@ Supports historical backtesting, Monte Carlo regular-season + full playoff-brack
 - Sidebar **Refresh live slate** refreshes NFL, NHL, and NBA in one click, plus a **Live Slate** tab (locked vs remaining games)
 - CLI: `python -m elo_lab.workflows.live_slate --sport NFL --season 2026`
 - CLI: `python -m elo_lab.workflows.live_slate --sport NBA --season 2026`
+- CLI: `python -m elo_lab.workflows.export_elo_snapshot` writes `outputs/elo_snapshot.json` with current NFL, NHL, and NBA team Elo (after locked games when the live slate has scores, otherwise the default-simulation warm-up) and the home advantage `compute_pregame` applies under the default config. The same JSON is also a second download next to Export Results (.xlsx).
 
 ### From Version 14.0
 

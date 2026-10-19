@@ -671,12 +671,11 @@ if run_clicked:
 # Global Export – quiet text-style control
 # ---------------------------------------------------------------------------
 if st.session_state.get("simulation_results") is not None:
-    try:
-        export_bytes = build_full_export(st.session_state)
-        filename = make_export_filename(st.session_state)
-
-        _left, _right = st.columns([3, 1])
-        with _right:
+    _left, _right = st.columns([3, 1])
+    with _right:
+        try:
+            export_bytes = build_full_export(st.session_state)
+            filename = make_export_filename(st.session_state)
             st.download_button(
                 label="Export Results (.xlsx)",
                 data=export_bytes,
@@ -688,9 +687,27 @@ if st.session_state.get("simulation_results") is not None:
                 ),
                 # type intentionally omitted / secondary so CSS can quiet it
             )
-    except Exception as e:
-        # Never let export problems break the rest of the dashboard
-        st.warning(f"Export temporarily unavailable: {e}")
+        except Exception as e:
+            # Never let export problems break the rest of the dashboard
+            st.warning(f"Export temporarily unavailable: {e}")
+
+        try:
+            from elo_lab.workflows.export_elo_snapshot import snapshot_json_bytes
+
+            st.download_button(
+                label="Export Elo snapshot (.json)",
+                data=snapshot_json_bytes(),
+                file_name="elo_snapshot.json",
+                mime="application/json",
+                help=(
+                    "Current NFL, NHL, and NBA Elo after locked games "
+                    "(or the default warm-up when none are locked) plus the "
+                    "home advantage the default config applies in compute_pregame."
+                ),
+                key="export_elo_snapshot_json",
+            )
+        except Exception as e:
+            st.warning(f"Elo snapshot export temporarily unavailable: {e}")
 
 
 # ---------------------------------------------------------------------------
