@@ -1,7 +1,7 @@
-Date,Start (ET),Visitor/Neutral,PTS,Home/Neutral,PTS,Notes
-Tue Oct 20 2026,3:00p,Boston Celtics,,Detroit Pistons,,
-Tue Oct 20 2026,7:00p,Philadelphia 76ers,,New York Knicks,,
-Tue Oct 20 2026,9:30p,Oklahoma City Thunder,,San Antonio Spurs,,
+Date,Start (ET),Visitor/Neutral,PTS,Home/Neutral,PTS.1,Notes
+Tue Oct 20 2026,3:00p,Boston Celtics,113.0,Detroit Pistons,121.0,
+Tue Oct 20 2026,7:00p,Philadelphia 76ers,106.0,New York Knicks,100.0,
+Tue Oct 20 2026,9:30p,Oklahoma City Thunder,116.0,San Antonio Spurs,104.0,
 Wed Oct 21 2026,7:00p,Atlanta Hawks,,Orlando Magic,,
 Wed Oct 21 2026,7:00p,Milwaukee Bucks,,Washington Wizards,,
 Wed Oct 21 2026,7:30p,Charlotte Hornets,,Brooklyn Nets,,
