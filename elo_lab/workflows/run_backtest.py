@@ -17,6 +17,7 @@ if ROOT not in sys.path:
 
 from elo_lab.engine import INITIAL_ELO, run_game
 from elo_lab.configuration.model_configs import MODEL_CONFIGS, AVAILABLE_MODELS
+from elo_lab.neutral_sites import exclude_neutral_sites
 
 os.makedirs("outputs", exist_ok=True)
 
@@ -24,6 +25,8 @@ os.makedirs("outputs", exist_ok=True)
 def run_backtest(config, model_name):
 
     schedule = pd.read_csv("data/nfl_games.csv")
+    # Super Bowl and International Series. See elo_lab.neutral_sites.
+    schedule = exclude_neutral_sites(schedule, sport="NFL")
     schedule = schedule.sort_values(["season", "week"]).reset_index(drop=True)
 
     team_elo = {}

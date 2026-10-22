@@ -25,6 +25,7 @@ from services.initial_ratings_service import (
 )
 from services.export_service import build_full_export, make_export_filename
 from services.evaluation_service import score_config_on_season
+from elo_lab.workflows.generate_default_sims import default_config
 from elo_lab.workflows.optimize_parameters import optimize_parameters_for_config
 from elo_lab.workflows.simulate_season import (
     describe_target_season_lock,
@@ -175,16 +176,32 @@ st.caption("NFL / NHL / NBA | Version 15.1")
 # ---------------------------------------------------------------------------
 def build_model_config(home_field, margin_of_victory, elevation, k=20,
                        hfa_value=55, elev_value=1.0):
-    """Build declarative model config. MOV is pure binary (scale fixed at 1.0)."""
-    adjustments = {}
+    """Build declarative model config. MOV is pure binary (scale fixed at 1.0).
+
+    Home field and Elevation Edge are named on the pregame pipeline when
+    their checkboxes are on. The engine applies only pipeline steps.
+    Margin of victory stays off the pipeline.
+    """
+    adjustments = {
+        "elevation_edge": {"enabled": False, "value": float(elev_value)},
+    }
+    pregame = []
     if home_field:
         adjustments["home_field"] = {"enabled": True, "value": hfa_value}
+        pregame.append("home_field")
     if margin_of_victory:
-        # Pure binary: on = margin-scaled update with fixed scale 1.0
+        # Pure binary: on = margin-scaled update with fixed scale 1.0.
+        # Not on postgame_pipeline, so the engine does not apply it.
         adjustments["margin_of_victory"] = {"enabled": True, "scale": 1.0}
     if elevation:
-        adjustments["elevation_edge"] = {"enabled": True, "value": elev_value}
-    return {"k": k, "adjustments": adjustments}
+        adjustments["elevation_edge"] = {"enabled": True, "value": float(elev_value)}
+        pregame.append("elevation_edge")
+    return {
+        "k": k,
+        "pregame_pipeline": pregame,
+        "postgame_pipeline": [],
+        "adjustments": adjustments,
+    }
 
 
 def get_optimize_for(hf, mov, elev, opt_hf, opt_mov, opt_elev):
@@ -508,18 +525,19 @@ with st.sidebar.expander("Customize Parameters", expanded=False):
 
     st.markdown("---")
     st.markdown("**Engine parameters**")
-    _default_k = {"NHL": 12, "NBA": 22, "NFL": 20}.get(sport, 20)
+    _shipped = default_config(sport)
+    _default_k = int(_shipped["k"])
     k = st.slider(
         "k-factor",
         min_value=5,
-        max_value=40,
+        max_value=60,
         value=_default_k,
         step=1,
         help="How much ratings move after each game. "
              "Higher k = more reactive (recent results dominate). "
              "Lower k = more stable (history carries more weight).",
     )
-    _default_hfa = {"NHL": 35, "NBA": 55, "NFL": 55}.get(sport, 55)
+    _default_hfa = int(_shipped["adjustments"]["home_field"]["value"])
     hfa_value = st.slider(
         _home["slider"], min_value=0, max_value=100, value=_default_hfa, step=5
     )

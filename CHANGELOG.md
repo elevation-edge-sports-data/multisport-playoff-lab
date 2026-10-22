@@ -2,6 +2,57 @@
 
 All notable changes to MultiSport Elo Lab are documented in this file.
 
+## Version history
+
+Moved from the README. Newer releases are listed first. The notes under each version heading below are the detailed record.
+
+| Version | Focus |
+|---------|-------|
+| 15.1    | Keyless NBA live slate: NBA CDN + ESPN scoreboard fallback |
+| 15.0    | Live slate: nflverse / NHL official web API / NBA scoreboard |
+| 14.0    | Lock completed games in target-season Monte Carlo |
+| 13.2    | Add 2027 NBA schedule |
+| 13.1    | Playoff spiral polish; Make Playoffs as the default radial metric; win/point box plot on Regular Season Projections |
+| 13.0    | Playoff Odds table, conference spirals, and playoff path bars |
+| 12.3    | Numerical simulation progress bar; playoffs reuse one Monte Carlo pass |
+| 12.2    | Match default sim settings to precomputed defaults; seed; logos in Playoff Outlook |
+| 12.1    | Regular season trajectories, historical param eval, random seed, schedule normalize fixes |
+| 12.0    | Simulate upcoming season (NFL 2026, NHL 2026–27), three-tab dashboard |
+| 11.5    | Warm-up Elo from recent actual results before target-season Monte Carlo |
+| 11.4    | Team logos in Elo Ratings, Trajectory, and Simulation |
+| 11.3    | One-click full results export (multi-sheet Excel) |
+| 11.2    | Instant default simulations on sport change + generator workflow |
+| 11.1    | NHL + NBA playoff-bracket simulation + multi-sport dispatch |
+| 11.0    | NFL playoff-bracket simulation |
+| 10      | Continuous Elevation Edge + Log5 baseline + residual diagnostics |
+| 9       | Multiseason support + full NBA integration + advanced initial-Elo controls |
+| 8.0–8.2 | Multi-sport (NHL) + achievement probabilities + calibration + NFL playoff-logic fix |
+| 7       | Parameter optimization + original Elevation Edge (binned) |
+| 6       | Interactive Streamlit dashboard |
+| 5       | Canonical engine + declarative transformation pipeline |
+
+### Release notes moved from the README
+
+These are the highlight notes that used to sit above the version table.
+
+**15.1.** Live slate pulls completed scores into the season CSV, then those games lock in Monte Carlo. NFL uses nflverse schedules, NHL uses api-web.nhle.com, and NBA uses the NBA CDN scoreboard with an ESPN scoreboard fallback and no key. Sidebar **Refresh live slate** refreshes all three sports, and the Live Slate tab lists locked versus remaining games. CLI: `python -m elo_lab.workflows.live_slate --sport NFL --season 2026` and `python -m elo_lab.workflows.live_slate --sport NBA --season 2026`. `python -m elo_lab.workflows.export_elo_snapshot` writes `outputs/elo_snapshot.json` with current NFL, NHL, and NBA team Elo (after locked games when the live slate has scores, otherwise the default-simulation warm-up) and the home advantage `compute_pregame` applies under the default config. The same JSON is a second download next to Export Results (.xlsx).
+
+**14.0.** Lock completed games in the target-season Monte Carlo: scored games stay fixed across sims; blank games are still sampled. Sidebar lock line, for example `NFL 2026 · upcoming · 0/272 games locked` or `NFL 2026 · in progress · 16/272 games locked`.
+
+**13.2.** Add the 2027 NBA schedule (schedule-only; scores blank until games are played). Raw versus processed layout under `data/nba/` with extract and process helpers. Sidebar shows the full Elo history window (for example 2024–2026, then simulate 2027).
+
+**13.1.** Playoff spiral logos align to abbreviation rays and sit just beyond each wedge tip. Figures are fixed squares. No spin. Default radial metric is Make Playoffs. Regular Season Projections opens with the wins/points box plot. Playoff Projections keeps the odds table, spirals, and path bars.
+
+**13.0.** Playoff Odds table with logo, abbreviation, and blue probability shading. One playoff spiral per conference, with a metric dropdown, team colors, and logos. Playoff path bars use the Color 1…5 round palette.
+
+**12.3.** Simulation progress updates at 10% steps. Playoffs reuse the primary Monte Carlo standings and Elo (one pass instead of two). Unused tab modules `configuration.py` and `elo_ratings.py` removed.
+
+**12.2.** Sidebar and default-sim settings match the precomputed defaults (sport-specific k and home advantage, Simulate from, seed). Playoff Outlook shows team logos. Regular Season Projections defaults to the top Western (NHL/NBA) or AFC (NFL) teams by first-round or wild-card probability. Sport-specific public defaults, a two-season warm-up, milder inter-season regression, and a record-based prior. `run_simulation` forwards `seed`.
+
+**12.1.** Regular Season Projections shows the observed prior-season path and the simulated target path (wins, points, rank). Run scores the current parameters on the last completed season (accuracy, log loss, Brier). Simulation count includes 25. Random seed for reproducible Monte Carlo. Upcoming NFL schedules use `VisTm` / `HomeTm`.
+
+**12.0.** Simulate the upcoming season for NFL 2026, NHL 2026–27, and NBA 2026–27, including the playoff bracket. **Simulate from** chooses the start of the history window. Three-tab dashboard: Playoff Projections, Regular Season Projections, Model Comparison. Grid Search hierarchy, pure binary Margin of Victory, regression to mean on by default. Model Comparison baselines: Always Home, Constant Home Rate, Coin Flip, and Log5. Export Results (.xlsx). Full playoff brackets for all three sports. Instant default simulations when switching sports.
+
 ## Version 15.1 — Keyless NBA live slate
 
 ### Changed

@@ -193,6 +193,7 @@ def score_config_on_season(
             filter_regular_season,
             is_playoff_row,
         )
+        from elo_lab.neutral_sites import exclude_neutral_sites
         from elo_lab.engine import run_game, compute_pregame
     except ImportError as e:
         return {"error": f"imports failed: {e}"}
@@ -205,6 +206,9 @@ def score_config_on_season(
     reg = filter_regular_season(df, sport=sport)
     if reg is not None and not reg.empty:
         df = reg
+
+    # Same neutral-site exclusion as backtest / grid search / snapshot.
+    df = exclude_neutral_sites(df, sport=sport)
 
     played = df.dropna(subset=["home_score", "away_score"]).copy()
     if played.empty:
@@ -233,6 +237,7 @@ def score_config_on_season(
                 away_elo=float(ratings[away]),
                 context={
                     "season": season,
+                    "sport": sport,
                     "home_team": home,
                     "away_team": away,
                 },
@@ -254,6 +259,7 @@ def score_config_on_season(
                 away_elo=float(ratings[away]),
                 context={
                     "season": season,
+                    "sport": sport,
                     "home_team": home,
                     "away_team": away,
                     "home_score": hs,

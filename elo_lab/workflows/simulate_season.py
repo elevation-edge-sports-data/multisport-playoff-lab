@@ -17,6 +17,8 @@ from typing import Optional, List, Dict, Any
 import pandas as pd
 import numpy as np
 
+from elo_lab.neutral_sites import attach_nba_arena, exclude_neutral_sites, neutral_mask
+
 try:
     from elo_lab.engine import compute_pregame, run_game
 except ImportError:
@@ -122,16 +124,22 @@ def _build_name_to_abbr(sport: str) -> dict:
     return mapping
 
 
-def normalize_schedule(df: pd.DataFrame, sport: str = "NFL") -> pd.DataFrame:
+def normalize_schedule(df: pd.DataFrame, sport: str = "NFL", season: str = None) -> pd.DataFrame:
     """
     Convert various schedule schemas into canonical columns:
       home_team, away_team, home_score, away_score  (+ season, week if present)
+
+    Also sets ``neutral_site`` from the source flag or venue list
+    (see ``elo_lab.neutral_sites``). Rows are not dropped here.
 
     Supported input formats:
       - Legacy combined: home_team / away_team / home_score / away_score
       - NBA B-R: Visitor/Neutral, PTS, Home/Neutral, PTS
       - NHL B-R: Visitor, G, Home, G
       - NFL B-R: Winner/tie, Loser/tie, Pts, Pts  (home unknown – treat winner as home)
+
+    ``season`` is the file year. NFL schedules that store "September 10"
+    instead of an ISO date need it to match International Series games.
     """
     df = df.copy()
     cols = {c.strip(): c for c in df.columns}
@@ -151,6 +159,7 @@ def normalize_schedule(df: pd.DataFrame, sport: str = "NFL") -> pd.DataFrame:
     if "home_team" in df.columns and "away_team" in df.columns:
         for col in ("home_team", "away_team"):
             df[col] = df[col].map(to_abbr)
+        df["neutral_site"] = neutral_mask(df, sport, season=season).to_numpy()
         return df
 
     # NBA: Visitor/Neutral, PTS, Home/Neutral, PTS  (duplicate PTS names)
@@ -168,6 +177,7 @@ def normalize_schedule(df: pd.DataFrame, sport: str = "NFL") -> pd.DataFrame:
             out["home_score"] = pd.to_numeric(df[home_pts], errors="coerce")
         if "Date" in df.columns:
             out["date"] = df["Date"]
+        out["neutral_site"] = neutral_mask(df, sport, season=season).to_numpy()
         return out
 
     # NHL B-R: Visitor, G, Home, G
@@ -184,6 +194,7 @@ def normalize_schedule(df: pd.DataFrame, sport: str = "NFL") -> pd.DataFrame:
             out["home_score"] = pd.to_numeric(df[home_g], errors="coerce")
         if "Date" in df.columns:
             out["date"] = df["Date"]
+        out["neutral_site"] = neutral_mask(df, sport, season=season).to_numpy()
         return out
 
     # NFL B-R completed: Winner/tie, Loser/tie, optional @ marker, Pts, Pts
@@ -198,7 +209,10 @@ def normalize_schedule(df: pd.DataFrame, sport: str = "NFL") -> pd.DataFrame:
             marker_c = df.columns[win_idx + 1]
 
         homes, aways, home_scores, away_scores = [], [], [], []
-        for _, row in df.iterrows():
+        weeks, dates = [], []
+        neutral_flags = []
+        neutral = neutral_mask(df, sport, season=season)
+        for idx, row in df.iterrows():
             w = row["Winner/tie"]
             l = row["Loser/tie"]
             if pd.isna(w) or pd.isna(l):
@@ -226,19 +240,25 @@ def normalize_schedule(df: pd.DataFrame, sport: str = "NFL") -> pd.DataFrame:
             aways.append(to_abbr(away))
             home_scores.append(hs)
             away_scores.append(as_)
+            neutral_flags.append(bool(neutral.loc[idx]))
+            # Keep week/date on the rows that survive a blank line, so
+            # regular-season filtering still sees Wild Card / Super Bowl.
+            if "Week" in df.columns:
+                weeks.append(row["Week"])
+            if "Date" in df.columns:
+                dates.append(row["Date"])
 
         out = pd.DataFrame({
             "home_team": homes,
             "away_team": aways,
             "home_score": home_scores,
             "away_score": away_scores,
+            "neutral_site": neutral_flags,
         })
-        if "Week" in df.columns:
-            # align only if same length – rebuild from kept rows is safer; skip week if mismatch
-            if len(out) == len(df):
-                out["week"] = df["Week"].values
-        if "Date" in df.columns and len(out) == len(df):
-            out["date"] = df["Date"].values
+        if weeks:
+            out["week"] = weeks
+        if dates:
+            out["date"] = dates
         return out
 
     # Upcoming / generic: explicit Away + Home (or Visitor + Home) without results yet
@@ -299,6 +319,7 @@ def normalize_schedule(df: pd.DataFrame, sport: str = "NFL") -> pd.DataFrame:
             out["week"] = df["Week"]
         if "Date" in df.columns:
             out["date"] = df["Date"]
+        out["neutral_site"] = neutral_mask(df, sport, season=season).to_numpy()
         # drop rows without two teams
         out = out.dropna(subset=["home_team", "away_team"])
         out = out[
@@ -894,7 +915,10 @@ def _load_season_schedule(sport: str, season: str):
     ]:
         if c.exists():
             try:
-                return normalize_schedule(pd.read_csv(c), sport=sport)
+                frame = pd.read_csv(c)
+                if sport.upper() == "NBA":
+                    frame = attach_nba_arena(frame, season)
+                return normalize_schedule(frame, sport=sport, season=str(season))
             except Exception as e:
                 errors.append(f"{c}: {e}")
                 continue
@@ -932,6 +956,8 @@ def warm_elo_from_actual_history(
             continue
         if not include_playoffs:
             df = filter_regular_season(df, sport=sport)
+        # Neutral-site games stay on the slate but do not move Elo.
+        df = exclude_neutral_sites(df, sport=sport)
         if df.empty:
             continue
 

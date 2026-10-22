@@ -63,42 +63,33 @@ from app.services.initial_ratings_service import (
 
 
 # ---------------------------------------------------------------------------
-# Sport-aware default model config (mirrors the dashboard defaults)
+# Sport-aware default model config. The dashboard sliders read this.
 # ---------------------------------------------------------------------------
 def default_config(sport: str = "NFL") -> dict:
     """
-    Sport-specific public defaults chosen for more realistic championship
-    contender rankings on first load:
+    Locked public defaults from the regular-season k and home-advantage search.
+    Elevation Edge is off. Home field is on the pregame pipeline, so the
+    engine adds the stored value. Margin of victory stays off that pipeline.
 
-      NHL  – lower k (more games), smaller home-ice edge
-      NBA  – slightly higher k, standard home-court
-      NFL  – classic k=20 / home=55
-
-    Elevation Edge stays off for the public default.
+      NHL  k=15, home ice 25
+      NFL  k=50, home field 30
+      NBA  k=30, home court 45
     """
     sport = (sport or "NFL").upper()
     if sport == "NHL":
-        return {
-            "k": 12,
-            "adjustments": {
-                "home_field": {"enabled": True, "value": 35},
-                "margin_of_victory": {"enabled": True, "scale": 1.0},
-            },
-        }
-    if sport == "NBA":
-        return {
-            "k": 22,
-            "adjustments": {
-                "home_field": {"enabled": True, "value": 55},
-                "margin_of_victory": {"enabled": True, "scale": 1.0},
-            },
-        }
-    # NFL (and fallback)
+        k, home = 15, 25
+    elif sport == "NBA":
+        k, home = 30, 45
+    else:
+        k, home = 50, 30
     return {
-        "k": 20,
+        "k": k,
+        "pregame_pipeline": ["home_field"],
+        "postgame_pipeline": [],
         "adjustments": {
-            "home_field": {"enabled": True, "value": 55},
+            "home_field": {"enabled": True, "value": home},
             "margin_of_victory": {"enabled": True, "scale": 1.0},
+            "elevation_edge": {"enabled": False, "value": 0.0},
         },
     }
 

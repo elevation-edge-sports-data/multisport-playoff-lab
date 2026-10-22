@@ -8,10 +8,9 @@ decisive score are not sampled. When the target slate has no locked games,
 the ratings are that warm-up (the ratings a default run starts from).
 
 ``home_advantage`` is the Elo ``compute_pregame`` adds to the home team
-under ``generate_default_sims.default_config``. The public default stores
-a home-field value (NFL 55, NHL 35, NBA 55) but does not set
-``pregame_pipeline``, so the engine applies the adjustment only when that
-name is listed. This file reports the applied delta.
+under ``generate_default_sims.default_config``. That config names
+``home_field`` on ``pregame_pipeline`` and leaves Elevation Edge off, so
+the applied delta is the stored home advantage (NHL 25, NFL 30, NBA 45).
 
 Usage (from the repo root):
 
@@ -47,6 +46,7 @@ def _prepare_import_path() -> Path:
 REPO_ROOT = _prepare_import_path()
 
 from elo_lab.engine import compute_pregame, run_game  # noqa: E402
+from elo_lab.neutral_sites import exclude_neutral_sites  # noqa: E402
 from elo_lab.workflows.generate_default_sims import default_config  # noqa: E402
 from elo_lab.workflows.simulate_season import (  # noqa: E402
     _build_name_to_abbr,
@@ -167,7 +167,11 @@ def _sort_schedule(schedule):
 
 
 def _replay_locked(schedule, config: dict, initial_ratings: dict, sport: str) -> dict:
-    """Update Elo on decisive locked games only. Unplayed games stay unsampled."""
+    """Update Elo on decisive locked games only. Unplayed games stay unsampled.
+
+    Neutral-site games are not sampled, same rule as the warm-up.
+    """
+    schedule = exclude_neutral_sites(schedule, sport=sport)
     schedule_teams = (
         pd.concat([schedule["home_team"], schedule["away_team"]])
         .dropna()

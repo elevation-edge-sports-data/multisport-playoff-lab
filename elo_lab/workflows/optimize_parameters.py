@@ -122,7 +122,7 @@ def optimize_parameters_for_config(
         print(f"Running optimized backtest: {label}")
 
         try:
-            # Use clear naming for backtest files
+            # run_backtest drops neutral-site games before scoring.
             df = run_backtest(config, label)
 
             p = df["p_home"].astype(float).values

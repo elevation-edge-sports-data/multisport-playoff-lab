@@ -63,8 +63,8 @@ def _home_advantage_for(sport: str, config: Optional[dict]) -> float:
         adj = (config.get("adjustments") or {}).get("home_field") or {}
         if adj.get("enabled") and "value" in adj:
             return float(adj["value"])
-    defaults = {"NFL": 55.0, "NHL": 35.0, "NBA": 55.0}
-    return defaults.get(sport.upper(), 55.0)
+    defaults = {"NFL": 30.0, "NHL": 25.0, "NBA": 45.0}
+    return defaults.get(sport.upper(), 30.0)
 
 
 def simulate_many_seasons(

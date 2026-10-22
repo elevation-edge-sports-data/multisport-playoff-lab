@@ -25,7 +25,7 @@ away -= K * (actual - p_home) * multiplier
 
 Three adjustments live in `elo_lab/adjustments.py`. Each one is a function of the game state. The engine calls the function registered in `ADJUSTMENTS` for every name on `pregame_pipeline` or `postgame_pipeline` whose `enabled` flag is true.
 
-- **Home field** runs before the probability. It adds a fixed number of Elo points to the home team (`adjustments.home_field.value`, default 55). The sidebar label is home ice, home court, or home field depending on the sport. The config key stays `home_field`.
+- **Home field** runs before the probability. It adds a fixed number of Elo points to the home team (`adjustments.home_field.value`). The public defaults are NHL 25, NFL 30, and NBA 45, with Elevation Edge off. The sidebar label is home ice, home court, or home field depending on the sport. The config key stays `home_field`.
 - **Margin of victory** runs after the score is known. On, the multiplier is `log(margin + 1) * scale`, clamped to 0.25–3. Off, the multiplier stays 1 and the update depends only on who won.
 - **Elevation Edge** also runs before the probability. Venue feet come from `app/metadata`.
 

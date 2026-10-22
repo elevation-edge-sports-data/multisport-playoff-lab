@@ -120,7 +120,8 @@ def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
                 keep.append("NBA Cup")
             elif pl in ("play-in game", "play-in", "play in"):
                 keep.append("Play-In Game")
-            elif pl in ("neutral", "vs"):
+            elif pl in ("neutral", "vs") or pl.startswith("at "):
+                # "at Mexico City Mexico" / "at Paris France" are neutral sites.
                 keep.append("Neutral")
             # ignore single-letter TV/flag codes (R, A, B, …)
         # dedupe while preserving order
@@ -133,6 +134,23 @@ def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
         return "; ".join(out)
 
     df["Notes"] = df["Notes"].map(_clean_notes)
+    # Stamp Neutral when the raw arena is a known neutral building
+    # (Global Games, NBA Cup knockout at T-Mobile Arena). Same list as
+    # elo_lab.neutral_sites.NBA_NEUTRAL_ARENAS. Home-arena NBA Cup games
+    # are not stamped.
+    if "Arena" in df.columns:
+        try:
+            from elo_lab.neutral_sites import arena_is_neutral
+        except ImportError:
+            arena_is_neutral = None
+        if arena_is_neutral is not None:
+            stamped = []
+            for note, arena in zip(df["Notes"], df["Arena"]):
+                text = note or ""
+                if arena_is_neutral(arena) and "Neutral" not in text.split("; "):
+                    text = "Neutral" if not text else f"{text}; Neutral"
+                stamped.append(text)
+            df["Notes"] = stamped
     return df
 
 
