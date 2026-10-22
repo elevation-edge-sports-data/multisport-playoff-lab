@@ -14,7 +14,7 @@ for entry in (ROOT, APP):
     if text not in sys.path:
         sys.path.insert(0, text)
 
-from elo_lab.engine import compute_pregame  # noqa: E402
+from elo_lab.engine import compute_pregame, run_game  # noqa: E402
 from elo_lab.workflows.generate_default_sims import default_config  # noqa: E402
 from elo_lab.workflows.search_k_home import (  # noqa: E402
     EXTENDED_GRIDS,
@@ -22,6 +22,12 @@ from elo_lab.workflows.search_k_home import (  # noqa: E402
     NFL_PRIOR_EXTENDED,
     PREVIOUS_BEST,
     adopt_recheck_home,
+    JOINT_MOV_GRIDS,
+    NBA_K_STEP,
+    NFL_WIDER_JOINT,
+    NFL_PRIOR_JOINT,
+    triple_position,
+    keep_mov_scale,
     current_pair,
     historical_eval_season,
     fitting_config,
@@ -34,13 +40,14 @@ from elo_lab.workflows.search_k_home import (  # noqa: E402
 
 def test_public_defaults_match_the_locked_calibration():
     assert current_pair("NHL") == (15.0, 25.0)
-    assert current_pair("NBA") == (30.0, 45.0)
-    assert current_pair("NFL") == (50.0, 30.0)
-    for sport, home in (("NHL", 25), ("NFL", 30), ("NBA", 45)):
+    assert current_pair("NBA") == (22.0, 45.0)
+    assert current_pair("NFL") == (50.0, 35.0)
+    for sport, home, mov in (("NHL", 25, 0.75), ("NFL", 35, 0.5), ("NBA", 45, 0.5)):
         shipped = default_config(sport)
         assert shipped["pregame_pipeline"] == ["home_field"]
-        assert shipped["postgame_pipeline"] == []
+        assert shipped["postgame_pipeline"] == ["margin_of_victory"]
         assert shipped["adjustments"]["home_field"]["value"] == home
+        assert shipped["adjustments"]["margin_of_victory"]["scale"] == mov
         assert shipped["adjustments"]["elevation_edge"]["enabled"] is False
 
 
@@ -71,6 +78,48 @@ def test_fitting_config_applies_home_advantage_and_not_elevation():
     assert adopt_recheck_home(30, 30, 0.01) is False
     assert adopt_recheck_home(30, 25, 0.0004) is False
     assert adopt_recheck_home(30, 25, 0.001) is True
+    off = fitting_config(20, 30, mov_scale=0)
+    on = fitting_config(20, 30, mov_scale=1.0)
+    assert off["postgame_pipeline"] == []
+    assert off["adjustments"]["margin_of_victory"]["enabled"] is False
+    assert on["postgame_pipeline"] == ["margin_of_victory"]
+    assert on["adjustments"]["margin_of_victory"]["scale"] == 1.0
+    context = {
+        "home_team": "H",
+        "away_team": "A",
+        "home_score": 21,
+        "away_score": 0,
+        "actual": 1,
+    }
+    plain = run_game(1500, 1500, context, off)
+    scaled = run_game(1500, 1500, context, on)
+    assert plain["multiplier"] == 1.0
+    assert scaled["multiplier"] > 1.0
+    assert keep_mov_scale(0.0, 0.01, 0.01) is False
+    assert keep_mov_scale(1.0, 0.001, 0.0009) is False
+    assert keep_mov_scale(1.0, 0.001, 0.001) is True
+
+
+def test_joint_mov_grid_includes_production_defaults_at_scale_zero():
+    assert JOINT_MOV_GRIDS["NHL"] == (
+        (10, 12, 15, 18, 20),
+        (15, 20, 25, 30, 35),
+        (0.0, 0.5, 0.75, 1.0, 1.25),
+    )
+    assert JOINT_MOV_GRIDS["NFL"][0] == (40, 45, 50, 55, 60)
+    assert JOINT_MOV_GRIDS["NBA"][1] == (35, 40, 45, 50, 55)
+    for _sport, (_k_values, _home_values, scales) in JOINT_MOV_GRIDS.items():
+        assert 0.0 in scales
+
+
+def test_nba_k_step_and_nfl_wider_grid_markers():
+    assert NBA_K_STEP == (20, 22, 25)
+    assert NFL_PRIOR_JOINT == (50.0, 35.0, 0.5)
+    assert triple_position(50, 35, 0.5, NFL_WIDER_JOINT) == "interior"
+    assert triple_position(35, 35, 0.5, NFL_WIDER_JOINT) == "boundary"
+    assert triple_position(50, 15, 0.5, NFL_WIDER_JOINT) == "boundary"
+    assert triple_position(50, 35, 0.0, NFL_WIDER_JOINT) == "boundary"
+    assert triple_position(65, 45, 1.0, NFL_WIDER_JOINT) == "boundary"
 
 
 def test_historical_eval_season_is_the_one_before_the_latest_file():
@@ -134,7 +183,7 @@ def test_nfl_k_followup_grid_and_k_axis():
     assert k_axis_position(45, k_values) == "interior"
     assert k_axis_position(35, k_values) == "lower boundary"
     assert k_axis_position(50, k_values) == "upper boundary"
-    assert current_pair("NFL") == (50.0, 30.0)
+    assert current_pair("NFL") == (50.0, 35.0)
 
 
 def test_home_advantage_changes_the_score_on_a_short_slate():

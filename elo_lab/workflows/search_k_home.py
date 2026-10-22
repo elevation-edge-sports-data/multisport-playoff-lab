@@ -25,6 +25,10 @@ Usage (from the repo root):
     python -m elo_lab.workflows.search_k_home --nfl-k
     python -m elo_lab.workflows.search_k_home --elevation
     python -m elo_lab.workflows.search_k_home --elevation-holdout
+    python -m elo_lab.workflows.search_k_home --mov
+    python -m elo_lab.workflows.search_k_home --joint-mov
+    python -m elo_lab.workflows.search_k_home --nba-k-step
+    python -m elo_lab.workflows.search_k_home --nfl-wider
 """
 
 from __future__ import annotations
@@ -110,8 +114,29 @@ HOME_RECHECK = {
     "NBA": (35, 40, 45, 50, 55),
 }
 # A home-advantage change is kept only when log loss improves by this much.
-# The same bar decides whether elevation earns a place on a held-out season.
+# The same bar decides whether elevation or a margin-of-victory scale is kept.
 HOME_MOVE_MIN_LOG_LOSS = 0.001
+# Scale 0 leaves margin of victory off (K multiplier 1). A positive scale is
+# log(margin + 1) * scale, clamped to [0.25, 3] by the adjustment.
+MOV_SCALE_GRID = (0.0, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0)
+# Joint k × home × MOV scale, centered on the locked production defaults.
+# Elevation stays off. Scale 0 is margin of victory off.
+JOINT_MOV_GRIDS = {
+    "NHL": ((10, 12, 15, 18, 20), (15, 20, 25, 30, 35), (0.0, 0.5, 0.75, 1.0, 1.25)),
+    "NFL": ((40, 45, 50, 55, 60), (20, 25, 30, 35, 40), (0.0, 0.5, 0.75, 1.0, 1.25)),
+    "NBA": ((25, 28, 30, 32, 35), (35, 40, 45, 50, 55), (0.0, 0.5, 0.75, 1.0, 1.25)),
+}
+# One step below the NBA joint winner (k=25, home=45, scale=0.5).
+NBA_K_STEP = (20, 22, 25)
+NBA_K_STEP_HOME = 45.0
+NBA_K_STEP_SCALE = 0.5
+# Wider NFL lattice around the joint winner (50, 35, 0.5).
+NFL_WIDER_JOINT = (
+    (35, 40, 45, 50, 55, 60, 65),
+    (15, 20, 25, 30, 35, 40, 45),
+    (0.0, 0.25, 0.5, 0.75, 1.0),
+)
+NFL_PRIOR_JOINT = (50.0, 35.0, 0.5)
 
 Game = Tuple[str, str, str, float, float]
 MEAN_ELO = 1500.0
@@ -158,24 +183,37 @@ def k_axis_position(k: float, k_values) -> str:
     return "interior"
 
 
-def fitting_config(k: float, home_advantage: float, elevation: float = 0.0) -> dict:
+def fitting_config(
+    k: float,
+    home_advantage: float,
+    elevation: float = 0.0,
+    mov_scale: float = 0.0,
+) -> dict:
     """Config that applies this k and home advantage.
 
-    Margin of victory stays off. Elevation Edge is on only when
-    ``elevation`` is not zero. The coefficient is Elo points per 1,000 ft.
-    Home field is on the pregame pipeline so the engine adds it.
+    Elevation Edge is on only when ``elevation`` is not zero. The
+    coefficient is Elo points per 1,000 ft. Home field is on the pregame
+    pipeline so the engine adds it.
+
+    ``mov_scale`` of 0 leaves margin of victory off, so the K multiplier
+    stays 1. A positive scale names ``margin_of_victory`` on the postgame
+    pipeline. That path is ``log(margin + 1) * scale``, clamped to [0.25, 3].
     """
     pregame = ["home_field"]
     elevation_on = float(elevation) != 0.0
+    mov_on = float(mov_scale) != 0.0
     if elevation_on:
         pregame.append("elevation_edge")
     return {
         "k": float(k),
         "pregame_pipeline": pregame,
-        "postgame_pipeline": [],
+        "postgame_pipeline": ["margin_of_victory"] if mov_on else [],
         "adjustments": {
             "home_field": {"enabled": True, "value": float(home_advantage)},
-            "margin_of_victory": {"enabled": False, "scale": 1.0},
+            "margin_of_victory": {
+                "enabled": mov_on,
+                "scale": float(mov_scale) if mov_on else 0.0,
+            },
             "elevation_edge": {
                 "enabled": elevation_on,
                 "value": float(elevation),
@@ -246,13 +284,14 @@ def score_games(
     home_advantage: float,
     elevation: float = 0.0,
     sport: Optional[str] = None,
+    mov_scale: float = 0.0,
 ) -> dict:
     """Walk ``games`` with one parameter triple. Reset Elo each season.
 
     ``sport`` is required for Elevation Edge. Without it the adjustment
     looks up NFL elevations.
     """
-    config = fitting_config(k, home_advantage, elevation=elevation)
+    config = fitting_config(k, home_advantage, elevation=elevation, mov_scale=mov_scale)
     ratings: dict = {}
     season_now: Optional[str] = None
     probs = []
@@ -291,6 +330,7 @@ def score_games(
         "k": float(k),
         "home_advantage": float(home_advantage),
         "elevation": float(elevation),
+        "mov_scale": float(mov_scale),
         "log_loss": float(np.mean(log_loss(p, y))),
         "brier": float(np.mean(brier(p, y))),
         "accuracy": float(accuracy(p, y)),
@@ -821,6 +861,543 @@ def summarize_holdout(results: pd.DataFrame) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+def keep_mov_scale(scale: float, fit_gain: float, season_gain: float) -> bool:
+    """Keep a positive scale only when both samples clear the log-loss bar."""
+    if float(scale) == 0.0:
+        return False
+    bar = HOME_MOVE_MIN_LOG_LOSS
+    return float(fit_gain) >= bar and float(season_gain) >= bar
+
+
+def run_mov_search() -> pd.DataFrame:
+    """Grid margin-of-victory scale at the locked (k, home) pair. Elevation off.
+
+    Scale 0 is margin of victory off. The latest completed season is scored
+    for scale 0 and for the fitting-sample winner.
+    """
+    from app.services.evaluation_service import score_config_on_season
+
+    frames = []
+    for sport, (k, home) in LOCKED_PAIRS.items():
+        print(f"MOV search {sport} at k={k:g}, home={home:g}...", flush=True)
+        schedule = load_fitting_games(sport)
+        records = _records(schedule)
+        counts = schedule.groupby("season", sort=False).size()
+        print(
+            "  " + ", ".join(f"{season}={int(n)}" for season, n in counts.items()),
+            flush=True,
+        )
+        n_seasons = int(schedule["season"].nunique())
+        fit_rows = []
+        for scale in MOV_SCALE_GRID:
+            scored = score_games(
+                records, k, home, elevation=0.0, sport=sport, mov_scale=scale,
+            )
+            scored.update({
+                "sport": sport,
+                "stage": "fit",
+                "season": "",
+                "n_seasons": n_seasons,
+            })
+            fit_rows.append(scored)
+        fit_df = _rank_scored(fit_rows)
+        best = fit_df.iloc[0]
+        baseline = fit_df[fit_df["mov_scale"] == 0.0].iloc[0]
+        best_scale = float(best["mov_scale"])
+        fit_gain = float(baseline["log_loss"] - best["log_loss"])
+        print(f"  best scale {best_scale:g} (fit log-loss gain {fit_gain:+.6f})", flush=True)
+
+        season = historical_eval_season(sport)
+        print(f"  latest completed season {season}...", flush=True)
+        season_rows = []
+        scales = [0.0] if best_scale == 0.0 else [0.0, best_scale]
+        for scale in scales:
+            scored = score_config_on_season(
+                sport,
+                season,
+                fitting_config(k, home, elevation=0.0, mov_scale=scale),
+            )
+            if "error" in scored:
+                raise RuntimeError(f"{sport} {season} scale {scale}: {scored['error']}")
+            season_rows.append({
+                "sport": sport,
+                "stage": "season",
+                "season": season,
+                "k": float(k),
+                "home_advantage": float(home),
+                "elevation": 0.0,
+                "mov_scale": float(scale),
+                "log_loss": float(scored["log_loss"]),
+                "brier": float(scored["brier"]),
+                "accuracy": float(scored["accuracy"]),
+                "n_games": int(scored["n_games"]),
+                "n_seasons": 1,
+                "rank": pd.NA,
+            })
+        season_df = pd.DataFrame(season_rows)
+        off_season = season_df[season_df["mov_scale"] == 0.0].iloc[0]
+        if best_scale == 0.0:
+            season_gain = 0.0
+            season_brier_gain = 0.0
+        else:
+            on_season = season_df[season_df["mov_scale"] == best_scale].iloc[0]
+            season_gain = float(off_season["log_loss"] - on_season["log_loss"])
+            season_brier_gain = float(off_season["brier"] - on_season["brier"])
+        kept = keep_mov_scale(best_scale, fit_gain, season_gain)
+        decision = {
+            "sport": sport,
+            "stage": "decision",
+            "season": season,
+            "k": float(k),
+            "home_advantage": float(home),
+            "elevation": 0.0,
+            "mov_scale": best_scale if kept else 0.0,
+            "best_scale": best_scale,
+            "kept": kept,
+            "fit_log_loss_gain": fit_gain,
+            "fit_brier_gain": float(baseline["brier"] - best["brier"]),
+            "season_log_loss_gain": season_gain,
+            "season_brier_gain": season_brier_gain,
+            "fit_clears_bar": bool(best_scale != 0.0 and fit_gain >= HOME_MOVE_MIN_LOG_LOSS),
+            "season_clears_bar": bool(best_scale != 0.0 and season_gain >= HOME_MOVE_MIN_LOG_LOSS),
+            "log_loss": float(best["log_loss"]),
+            "brier": float(best["brier"]),
+            "accuracy": float(best["accuracy"]),
+            "n_games": int(best["n_games"]),
+            "n_seasons": n_seasons,
+            "rank": 1,
+        }
+        frames.extend([fit_df, season_df, pd.DataFrame([decision])])
+    return pd.concat(frames, ignore_index=True)
+
+
+def summarize_mov(results: pd.DataFrame) -> str:
+    """Best margin-of-victory scale, deltas, and whether the keep bar cleared."""
+    lines = []
+    for sport in LOCKED_PAIRS:
+        block = results[results["sport"] == sport]
+        decision = block[block["stage"] == "decision"].iloc[0]
+        fit = block[block["stage"] == "fit"].sort_values("rank")
+        best_scale = float(decision["best_scale"])
+        lines.append(
+            f"{sport}: best scale {best_scale:g} at k={decision['k']:g}, "
+            f"home={decision['home_advantage']:g}, elevation off"
+        )
+        if best_scale == max(MOV_SCALE_GRID):
+            lines.append("  scale is on the upper edge of the grid")
+        elif best_scale == 0.0:
+            lines.append("  best scale is 0 (margin of victory off)")
+        lines.append(
+            f"  fitting games: log loss {decision['log_loss']:.6f}  "
+            f"brier {decision['brier']:.6f}  "
+            f"vs scale 0: log loss {decision['fit_log_loss_gain']:+.6f}  "
+            f"brier {decision['fit_brier_gain']:+.6f}"
+        )
+        lines.append(
+            f"  latest completed season {decision['season']}: "
+            f"vs scale 0: log loss {decision['season_log_loss_gain']:+.6f}  "
+            f"brier {decision['season_brier_gain']:+.6f}"
+        )
+        lines.append(
+            f"  fit clears 0.001: {bool(decision['fit_clears_bar'])}  "
+            f"season clears 0.001: {bool(decision['season_clears_bar'])}"
+        )
+        if bool(decision["kept"]):
+            lines.append(f"  keep scale {best_scale:g}")
+        else:
+            lines.append("  keep margin of victory off")
+        show = fit.copy()
+        for col in ("log_loss", "brier", "accuracy"):
+            show[col] = show[col].map(lambda v: f"{float(v):.6f}")
+        show["mov_scale"] = show["mov_scale"].map(lambda v: f"{float(v):g}")
+        lines.append("  fitting grid:")
+        lines.append(
+            show[["rank", "mov_scale", "log_loss", "brier", "accuracy"]].to_string(index=False)
+        )
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _same_triple(row, k: float, home: float, scale: float) -> bool:
+    return (
+        float(row["k"]) == float(k)
+        and float(row["home_advantage"]) == float(home)
+        and float(row["mov_scale"]) == float(scale)
+    )
+
+
+def run_joint_mov_search() -> pd.DataFrame:
+    """Grid k, home advantage, and MOV scale together. Elevation stays off.
+
+    Production defaults are scored on the same fitting games and again on
+    the latest completed season. This does not write those defaults.
+    """
+    from app.services.evaluation_service import score_config_on_season
+
+    frames = []
+    for sport, (k_values, home_values, scales) in JOINT_MOV_GRIDS.items():
+        default_k, default_home = current_pair(sport)
+        print(
+            f"Joint MOV search {sport} "
+            f"(default k={default_k:g}, home={default_home:g}, scale 0)...",
+            flush=True,
+        )
+        schedule = load_fitting_games(sport)
+        records = _records(schedule)
+        counts = schedule.groupby("season", sort=False).size()
+        print(
+            "  " + ", ".join(f"{season}={int(n)}" for season, n in counts.items()),
+            flush=True,
+        )
+        n_seasons = int(schedule["season"].nunique())
+        total = len(k_values) * len(home_values) * len(scales)
+        rows = []
+        done = 0
+        for k in k_values:
+            for home in home_values:
+                for scale in scales:
+                    done += 1
+                    if done == 1 or done % 25 == 0 or done == total:
+                        print(f"  {done}/{total}", flush=True)
+                    scored = score_games(
+                        records,
+                        k,
+                        home,
+                        elevation=0.0,
+                        sport=sport,
+                        mov_scale=scale,
+                    )
+                    scored.update({
+                        "sport": sport,
+                        "stage": "fit",
+                        "season": "",
+                        "n_seasons": n_seasons,
+                        "is_default": _same_triple(scored, default_k, default_home, 0.0),
+                    })
+                    rows.append(scored)
+        fit_df = pd.DataFrame(rows).sort_values(
+            ["log_loss", "brier", "mov_scale", "k", "home_advantage"],
+            ascending=[True, True, True, True, True],
+        ).reset_index(drop=True)
+        fit_df["rank"] = np.arange(1, len(fit_df) + 1)
+        best = fit_df.iloc[0]
+        default_rows = fit_df[fit_df["is_default"]]
+        if default_rows.empty:
+            raise RuntimeError(f"{sport} production default is not on this grid")
+        baseline = default_rows.iloc[0]
+        print(
+            f"  best k={best['k']:g} home={best['home_advantage']:g} "
+            f"scale={best['mov_scale']:g}",
+            flush=True,
+        )
+
+        season = historical_eval_season(sport)
+        print(f"  latest completed season {season}...", flush=True)
+        season_specs = [
+            ("default", default_k, default_home, 0.0),
+            ("winner", float(best["k"]), float(best["home_advantage"]), float(best["mov_scale"])),
+        ]
+        seen = set()
+        season_rows = []
+        for label, k, home, scale in season_specs:
+            key = (float(k), float(home), float(scale))
+            if key in seen:
+                continue
+            seen.add(key)
+            scored = score_config_on_season(
+                sport,
+                season,
+                fitting_config(k, home, elevation=0.0, mov_scale=scale),
+            )
+            if "error" in scored:
+                raise RuntimeError(f"{sport} {season} {label}: {scored['error']}")
+            season_rows.append({
+                "sport": sport,
+                "stage": "season",
+                "season": season,
+                "model": label,
+                "k": float(k),
+                "home_advantage": float(home),
+                "elevation": 0.0,
+                "mov_scale": float(scale),
+                "log_loss": float(scored["log_loss"]),
+                "brier": float(scored["brier"]),
+                "accuracy": float(scored["accuracy"]),
+                "n_games": int(scored["n_games"]),
+                "n_seasons": 1,
+                "is_default": label == "default",
+                "rank": pd.NA,
+            })
+        frames.extend([fit_df, pd.DataFrame(season_rows)])
+    return pd.concat(frames, ignore_index=True)
+
+
+def summarize_joint_mov(results: pd.DataFrame) -> str:
+    """Best (k, home, MOV scale) versus production defaults on both samples."""
+    lines = [
+        "sport  best_k  best_home  best_scale  mov0_preferred  "
+        "fit_ll_gain  fit_brier_gain  season  season_ll_gain  season_brier_gain"
+    ]
+    for sport in ("NHL", "NFL", "NBA"):
+        block = results[results["sport"] == sport]
+        fit = block[block["stage"] == "fit"].sort_values("rank")
+        best = fit.iloc[0]
+        baseline = fit[fit["is_default"]].iloc[0]
+        season_rows = block[block["stage"] == "season"]
+        default_season = season_rows[season_rows["is_default"]].iloc[0]
+        winner_match = season_rows[
+            (season_rows["k"] == float(best["k"]))
+            & (season_rows["home_advantage"] == float(best["home_advantage"]))
+            & (season_rows["mov_scale"] == float(best["mov_scale"]))
+        ]
+        winner_season = winner_match.iloc[0] if not winner_match.empty else default_season
+        fit_ll = float(baseline["log_loss"] - best["log_loss"])
+        fit_br = float(baseline["brier"] - best["brier"])
+        season_ll = float(default_season["log_loss"] - winner_season["log_loss"])
+        season_br = float(default_season["brier"] - winner_season["brier"])
+        mov0 = float(best["mov_scale"]) == 0.0
+        lines.append(
+            f"{sport:4}  {best['k']:7g}  {best['home_advantage']:9g}  "
+            f"{best['mov_scale']:10g}  {str(mov0):14}  "
+            f"{fit_ll:+11.6f}  {fit_br:+14.6f}  {default_season['season']:6}  "
+            f"{season_ll:+14.6f}  {season_br:+16.6f}"
+        )
+        lines.append(
+            f"  fit log loss {best['log_loss']:.6f} (default {baseline['log_loss']:.6f})  "
+            f"brier {best['brier']:.6f} (default {baseline['brier']:.6f})  "
+            f"n={int(best['n_games'])}"
+        )
+        lines.append(
+            f"  season log loss {winner_season['log_loss']:.6f} "
+            f"(default {default_season['log_loss']:.6f})  "
+            f"brier {winner_season['brier']:.6f} "
+            f"(default {default_season['brier']:.6f})  "
+            f"n={int(default_season['n_games'])}"
+        )
+    return "\n".join(lines) + "\n"
+
+
+def _axis_interior(value: float, values) -> bool:
+    nums = [float(v) for v in values]
+    return min(nums) < float(value) < max(nums)
+
+
+def triple_position(k: float, home: float, scale: float, grid) -> str:
+    """``interior`` only when k, home advantage, and scale are all inside the grid."""
+    k_values, home_values, scales = grid
+    inside = (
+        _axis_interior(k, k_values)
+        and _axis_interior(home, home_values)
+        and _axis_interior(scale, scales)
+    )
+    return "interior" if inside else "boundary"
+
+
+def _season_metrics(sport: str, season: str, k: float, home: float, scale: float) -> dict:
+    from app.services.evaluation_service import score_config_on_season
+
+    scored = score_config_on_season(
+        sport,
+        season,
+        fitting_config(k, home, elevation=0.0, mov_scale=scale),
+    )
+    if "error" in scored:
+        raise RuntimeError(f"{sport} {season} k={k} home={home} scale={scale}: {scored['error']}")
+    return {
+        "log_loss": float(scored["log_loss"]),
+        "brier": float(scored["brier"]),
+        "accuracy": float(scored["accuracy"]),
+        "n_games": int(scored["n_games"]),
+    }
+
+
+def run_nba_k_step() -> pd.DataFrame:
+    """k in {20, 22, 25} with home advantage 45 and MOV scale 0.5. Elevation off."""
+    print("NBA k step at home=45, scale=0.5...", flush=True)
+    schedule = load_fitting_games("NBA")
+    records = _records(schedule)
+    counts = schedule.groupby("season", sort=False).size()
+    print(
+        "  " + ", ".join(f"{season}={int(n)}" for season, n in counts.items()),
+        flush=True,
+    )
+    rows = []
+    for k in NBA_K_STEP:
+        scored = score_games(
+            records, k, NBA_K_STEP_HOME, elevation=0.0, sport="NBA", mov_scale=NBA_K_STEP_SCALE,
+        )
+        scored.update({
+            "sport": "NBA",
+            "stage": "fit",
+            "n_seasons": int(schedule["season"].nunique()),
+        })
+        rows.append(scored)
+    out = pd.DataFrame(rows)
+    out["log_loss_rank"] = out["log_loss"].rank(method="min").astype(int)
+    out["brier_rank"] = out["brier"].rank(method="min").astype(int)
+    reference = out[out["k"] == 25.0].iloc[0]
+    out["log_loss_vs_25"] = reference["log_loss"] - out["log_loss"]
+    out["brier_vs_25"] = reference["brier"] - out["brier"]
+    return out.sort_values(["log_loss", "brier", "k"]).reset_index(drop=True)
+
+
+def summarize_nba_k_step(results: pd.DataFrame) -> str:
+    best_ll = results.sort_values(["log_loss", "brier", "k"]).iloc[0]
+    best_br = results.sort_values(["brier", "log_loss", "k"]).iloc[0]
+    lines = [
+        f"NBA best log loss: k={best_ll['k']:g}  "
+        f"log loss {best_ll['log_loss']:.6f}  brier {best_ll['brier']:.6f}",
+        f"NBA best Brier: k={best_br['k']:g}  "
+        f"brier {best_br['brier']:.6f}  log loss {best_br['log_loss']:.6f}",
+    ]
+    for _, row in results.sort_values("k").iterrows():
+        lines.append(
+            f"  k={row['k']:g}  log loss {row['log_loss']:.6f} "
+            f"({row['log_loss_vs_25']:+.6f} vs 25)  "
+            f"brier {row['brier']:.6f} ({row['brier_vs_25']:+.6f} vs 25)"
+        )
+    return "\n".join(lines) + "\n"
+
+
+def run_nfl_wider_joint() -> pd.DataFrame:
+    """Wider NFL k × home × MOV scale grid, then the 2025 season comparison."""
+    k_values, home_values, scales = NFL_WIDER_JOINT
+    default_k, default_home = current_pair("NFL")
+    prior_k, prior_home, prior_scale = NFL_PRIOR_JOINT
+    print(
+        f"Wider NFL joint search (default k={default_k:g}, home={default_home:g}, scale 0)...",
+        flush=True,
+    )
+    schedule = load_fitting_games("NFL")
+    records = _records(schedule)
+    counts = schedule.groupby("season", sort=False).size()
+    print(
+        "  " + ", ".join(f"{season}={int(n)}" for season, n in counts.items()),
+        flush=True,
+    )
+    n_seasons = int(schedule["season"].nunique())
+    total = len(k_values) * len(home_values) * len(scales)
+    rows = []
+    done = 0
+    for k in k_values:
+        for home in home_values:
+            for scale in scales:
+                done += 1
+                if done == 1 or done % 25 == 0 or done == total:
+                    print(f"  {done}/{total}", flush=True)
+                scored = score_games(
+                    records, k, home, elevation=0.0, sport="NFL", mov_scale=scale,
+                )
+                scored.update({
+                    "sport": "NFL",
+                    "stage": "fit",
+                    "season": "",
+                    "n_seasons": n_seasons,
+                    "is_default": _same_triple(scored, default_k, default_home, 0.0),
+                    "is_prior_joint": _same_triple(scored, prior_k, prior_home, prior_scale),
+                    "grid_position": triple_position(k, home, scale, NFL_WIDER_JOINT),
+                })
+                rows.append(scored)
+    fit_df = pd.DataFrame(rows).sort_values(
+        ["log_loss", "brier", "mov_scale", "k", "home_advantage"],
+        ascending=[True, True, True, True, True],
+    ).reset_index(drop=True)
+    fit_df["rank"] = np.arange(1, len(fit_df) + 1)
+    best = fit_df.iloc[0]
+    print(
+        f"  best k={best['k']:g} home={best['home_advantage']:g} "
+        f"scale={best['mov_scale']:g} ({best['grid_position']})",
+        flush=True,
+    )
+
+    print("  2025 season...", flush=True)
+    specs = [
+        ("default", default_k, default_home, 0.0),
+        ("prior_joint", prior_k, prior_home, prior_scale),
+        ("winner", float(best["k"]), float(best["home_advantage"]), float(best["mov_scale"])),
+    ]
+    seen = set()
+    season_rows = []
+    for label, k, home, scale in specs:
+        key = (float(k), float(home), float(scale))
+        if key in seen:
+            continue
+        seen.add(key)
+        metrics = _season_metrics("NFL", "2025", k, home, scale)
+        season_rows.append({
+            "sport": "NFL",
+            "stage": "season",
+            "season": "2025",
+            "model": label,
+            "k": float(k),
+            "home_advantage": float(home),
+            "elevation": 0.0,
+            "mov_scale": float(scale),
+            "n_seasons": 1,
+            "is_default": label == "default",
+            "is_prior_joint": label == "prior_joint",
+            "grid_position": triple_position(k, home, scale, NFL_WIDER_JOINT),
+            "rank": pd.NA,
+            **metrics,
+        })
+    return pd.concat([fit_df, pd.DataFrame(season_rows)], ignore_index=True)
+
+
+def summarize_nfl_wider(results: pd.DataFrame) -> str:
+    fit = results[results["stage"] == "fit"].sort_values("rank")
+    best = fit.iloc[0]
+    baseline = fit[fit["is_default"]].iloc[0]
+    prior = fit[fit["is_prior_joint"]].iloc[0]
+    season = results[results["stage"] == "season"]
+
+    def season_row(k, home, scale):
+        hit = season[
+            (season["k"] == float(k))
+            & (season["home_advantage"] == float(home))
+            & (season["mov_scale"] == float(scale))
+        ]
+        return hit.iloc[0]
+
+    best_season = season_row(best["k"], best["home_advantage"], best["mov_scale"])
+    default_season = season_row(baseline["k"], baseline["home_advantage"], baseline["mov_scale"])
+    prior_season = season_row(prior["k"], prior["home_advantage"], prior["mov_scale"])
+    lines = [
+        f"NFL best k={best['k']:g}, home={best['home_advantage']:g}, "
+        f"scale={best['mov_scale']:g} ({best['grid_position']})",
+        f"  fit log loss {best['log_loss']:.6f}  brier {best['brier']:.6f}  n={int(best['n_games'])}",
+        (
+            f"  vs default (50, 30, 0): "
+            f"log loss {baseline['log_loss'] - best['log_loss']:+.6f}  "
+            f"brier {baseline['brier'] - best['brier']:+.6f}"
+        ),
+        (
+            f"  vs prior joint (50, 35, 0.5): "
+            f"log loss {prior['log_loss'] - best['log_loss']:+.6f}  "
+            f"brier {prior['brier'] - best['brier']:+.6f}"
+        ),
+        (
+            f"  2025 vs default: "
+            f"log loss {default_season['log_loss'] - best_season['log_loss']:+.6f}  "
+            f"brier {default_season['brier'] - best_season['brier']:+.6f}  "
+            f"n={int(default_season['n_games'])}"
+        ),
+        (
+            f"  2025 vs prior joint: "
+            f"log loss {prior_season['log_loss'] - best_season['log_loss']:+.6f}  "
+            f"brier {prior_season['brier'] - best_season['brier']:+.6f}"
+        ),
+        (
+            f"  2025 scores: best log loss {best_season['log_loss']:.6f} "
+            f"brier {best_season['brier']:.6f}; "
+            f"default log loss {default_season['log_loss']:.6f} "
+            f"brier {default_season['brier']:.6f}; "
+            f"prior log loss {prior_season['log_loss']:.6f} "
+            f"brier {prior_season['brier']:.6f}"
+        ),
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def main(argv: Optional[Sequence[str]] = None) -> None:
     parser = argparse.ArgumentParser(
         description="Grid search k and home advantage on non-neutral regular-season games."
@@ -846,13 +1423,35 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         action="store_true",
         help="Score default, k+home, and the elevation triple on the latest completed season.",
     )
+    mode.add_argument(
+        "--mov",
+        action="store_true",
+        help="Margin-of-victory scale grid at the locked (k, home) pairs. Elevation off.",
+    )
+    mode.add_argument(
+        "--joint-mov",
+        action="store_true",
+        help="Joint k × home advantage × MOV scale grid. Elevation off.",
+    )
+    mode.add_argument(
+        "--nba-k-step",
+        action="store_true",
+        help="NBA k in {20, 22, 25} at home advantage 45 and MOV scale 0.5.",
+    )
+    mode.add_argument(
+        "--nfl-wider",
+        action="store_true",
+        help="Wider NFL k × home × MOV scale grid, scored on 2025 as well.",
+    )
     parser.add_argument(
         "--out",
         type=Path,
         default=None,
         help="CSV path (default depends on the mode: outputs/k_home_search.csv, "
              "outputs/k_home_search_extended.csv, outputs/k_home_search_nfl_k.csv, "
-             "outputs/elevation_search.csv, or outputs/elevation_holdout.csv)",
+             "outputs/elevation_search.csv, outputs/elevation_holdout.csv, "
+             "outputs/mov_scale_search.csv, outputs/k_home_mov_search.csv, "
+             "outputs/nba_k_step.csv, or outputs/nfl_wider_joint.csv)",
     )
     parser.add_argument(
         "--sports",
@@ -878,6 +1477,18 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     elif args.elevation_holdout:
         results = run_elevation_holdout()
         default_out = REPO_ROOT / "outputs" / "elevation_holdout.csv"
+    elif args.mov:
+        results = run_mov_search()
+        default_out = REPO_ROOT / "outputs" / "mov_scale_search.csv"
+    elif args.joint_mov:
+        results = run_joint_mov_search()
+        default_out = REPO_ROOT / "outputs" / "k_home_mov_search.csv"
+    elif args.nba_k_step:
+        results = run_nba_k_step()
+        default_out = REPO_ROOT / "outputs" / "nba_k_step.csv"
+    elif args.nfl_wider:
+        results = run_nfl_wider_joint()
+        default_out = REPO_ROOT / "outputs" / "nfl_wider_joint.csv"
     else:
         results = run_search(sport.upper() for sport in args.sports)
         default_out = REPO_ROOT / "outputs" / "k_home_search.csv"
@@ -893,6 +1504,14 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         print(summarize_elevation(results))
     elif args.elevation_holdout:
         print(summarize_holdout(results))
+    elif args.mov:
+        print(summarize_mov(results))
+    elif args.joint_mov:
+        print(summarize_joint_mov(results))
+    elif args.nba_k_step:
+        print(summarize_nba_k_step(results))
+    elif args.nfl_wider:
+        print(summarize_nfl_wider(results))
     else:
         print(summarize(results, top_n=args.top))
     print(f"Wrote {out}")

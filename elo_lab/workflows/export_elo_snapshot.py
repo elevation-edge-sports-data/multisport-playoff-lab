@@ -10,7 +10,8 @@ the ratings are that warm-up (the ratings a default run starts from).
 ``home_advantage`` is the Elo ``compute_pregame`` adds to the home team
 under ``generate_default_sims.default_config``. That config names
 ``home_field`` on ``pregame_pipeline`` and leaves Elevation Edge off, so
-the applied delta is the stored home advantage (NHL 25, NFL 30, NBA 45).
+the applied delta is the stored home advantage (NHL 25, NFL 35, NBA 45).
+Margin of victory is on for the rating updates (NHL scale 0.75, NFL and NBA 0.5).
 
 Usage (from the repo root):
 

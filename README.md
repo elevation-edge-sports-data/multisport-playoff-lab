@@ -39,11 +39,11 @@ multisport-live-win-probability does not automatically import this package yet. 
 
 ## Calibrated defaults
 
-| Sport | k | Home advantage | Elevation |
-| --- | --- | --- | --- |
-| NHL | 15 | 25 | off |
-| NFL | 50 | 30 | off |
-| NBA | 30 | 45 | off |
+| Sport | k | Home advantage | MOV scale | Elevation |
+| --- | --- | --- | --- | --- |
+| NHL | 15 | 25 | 0.75 | off |
+| NFL | 50 | 35 | 0.5 | off |
+| NBA | 22 | 45 | 0.5 | off |
 
 These were fit on non-neutral regular-season games.
 

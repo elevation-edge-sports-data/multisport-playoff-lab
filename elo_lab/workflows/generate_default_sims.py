@@ -67,28 +67,28 @@ from app.services.initial_ratings_service import (
 # ---------------------------------------------------------------------------
 def default_config(sport: str = "NFL") -> dict:
     """
-    Locked public defaults from the regular-season k and home-advantage search.
-    Elevation Edge is off. Home field is on the pregame pipeline, so the
-    engine adds the stored value. Margin of victory stays off that pipeline.
+    Locked public defaults. Elevation Edge is off. Home field is on the
+    pregame pipeline. Margin of victory is on the postgame pipeline at the
+    sport's scale (log(margin + 1) * scale, clamped to [0.25, 3]).
 
-      NHL  k=15, home ice 25
-      NFL  k=50, home field 30
-      NBA  k=30, home court 45
+      NHL  k=15, home ice 25, MOV scale 0.75
+      NFL  k=50, home field 35, MOV scale 0.5
+      NBA  k=22, home court 45, MOV scale 0.5
     """
     sport = (sport or "NFL").upper()
     if sport == "NHL":
-        k, home = 15, 25
+        k, home, mov_scale = 15, 25, 0.75
     elif sport == "NBA":
-        k, home = 30, 45
+        k, home, mov_scale = 22, 45, 0.5
     else:
-        k, home = 50, 30
+        k, home, mov_scale = 50, 35, 0.5
     return {
         "k": k,
         "pregame_pipeline": ["home_field"],
-        "postgame_pipeline": [],
+        "postgame_pipeline": ["margin_of_victory"],
         "adjustments": {
             "home_field": {"enabled": True, "value": home},
-            "margin_of_victory": {"enabled": True, "scale": 1.0},
+            "margin_of_victory": {"enabled": True, "scale": mov_scale},
             "elevation_edge": {"enabled": False, "value": 0.0},
         },
     }

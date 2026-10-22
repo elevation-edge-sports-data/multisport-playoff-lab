@@ -34,8 +34,13 @@ def test_snapshot_matches_compute_pregame_and_metadata_abbreviations():
         assert set(block["teams"]) == set(load_teams(sport))
         assert all(isinstance(value, float) for value in block["teams"].values())
 
-    # Locked NFL/NHL slates move ratings off a flat 1500. NBA 2027 has no scores.
+    # Locked slates move ratings off a flat 1500. NBA stays on the warm-up path
+    # whether or not a few target-season games have a score.
     assert len(set(snapshot["sports"]["nfl"]["teams"].values())) > 1
     assert len(set(snapshot["sports"]["nhl"]["teams"].values())) > 1
+    assert len(set(snapshot["sports"]["nba"]["teams"].values())) > 1
     assert "post-locked" in snapshot["sports"]["nfl"]["source"]
-    assert "default warm-up" in snapshot["sports"]["nba"]["source"]
+    assert "warm-up" in snapshot["sports"]["nba"]["source"]
+    assert snapshot["sports"]["nhl"]["home_advantage"] == 25.0
+    assert snapshot["sports"]["nfl"]["home_advantage"] == 35.0
+    assert snapshot["sports"]["nba"]["home_advantage"] == 45.0

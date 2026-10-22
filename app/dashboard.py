@@ -175,31 +175,35 @@ st.caption("NFL / NHL / NBA | Version 15.1")
 # Model config helpers
 # ---------------------------------------------------------------------------
 def build_model_config(home_field, margin_of_victory, elevation, k=20,
-                       hfa_value=55, elev_value=1.0):
-    """Build declarative model config. MOV is pure binary (scale fixed at 1.0).
+                       hfa_value=55, elev_value=1.0, mov_scale=1.0):
+    """Build declarative model config.
 
     Home field and Elevation Edge are named on the pregame pipeline when
-    their checkboxes are on. The engine applies only pipeline steps.
-    Margin of victory stays off the pipeline.
+    their checkboxes are on. Margin of victory is named on the postgame
+    pipeline when its checkbox is on, using ``mov_scale``. The engine
+    applies only pipeline steps.
     """
     adjustments = {
         "elevation_edge": {"enabled": False, "value": float(elev_value)},
     }
     pregame = []
+    postgame = []
     if home_field:
         adjustments["home_field"] = {"enabled": True, "value": hfa_value}
         pregame.append("home_field")
     if margin_of_victory:
-        # Pure binary: on = margin-scaled update with fixed scale 1.0.
-        # Not on postgame_pipeline, so the engine does not apply it.
-        adjustments["margin_of_victory"] = {"enabled": True, "scale": 1.0}
+        adjustments["margin_of_victory"] = {
+            "enabled": True,
+            "scale": float(mov_scale),
+        }
+        postgame.append("margin_of_victory")
     if elevation:
         adjustments["elevation_edge"] = {"enabled": True, "value": float(elev_value)}
         pregame.append("elevation_edge")
     return {
         "k": k,
         "pregame_pipeline": pregame,
-        "postgame_pipeline": [],
+        "postgame_pipeline": postgame,
         "adjustments": adjustments,
     }
 
@@ -590,6 +594,7 @@ if st.session_state.get("_sim_running"):
                            "Refresh the page to cancel.")
 
 if run_clicked:
+    _shipped_mov = float(default_config(sport)["adjustments"]["margin_of_victory"]["scale"])
     config = build_model_config(
         home_field,
         margin_of_victory,
@@ -597,6 +602,7 @@ if run_clicked:
         k=k,
         hfa_value=hfa_value,
         elev_value=elev_value,
+        mov_scale=_shipped_mov,
     )
     optimize_for = get_optimize_for(
         home_field, margin_of_victory, elevation, opt_hf, opt_mov, opt_elev
