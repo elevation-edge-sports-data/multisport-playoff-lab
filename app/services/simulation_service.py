@@ -6,6 +6,7 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 # Use the multi-sport playoff wrapper
 # ---------------------------------------------------------------------------
+from elo_lab.playoffs.uncertainty import MAX_PLAYOFF_SIMS
 from elo_lab.workflows.simulate_with_playoffs import simulate_many_seasons
 
 from elo_lab.workflows.simulate_season import (
@@ -299,6 +300,7 @@ def run_simulation(
     """
     tmp_path = None
     try:
+        n_collected = int(n_sims)
         if season is not None:
             from elo_lab.workflows.simulate_season import simulate_many_seasons_multiyear
             try:
@@ -347,6 +349,7 @@ def run_simulation(
             )
 
             # Playoffs from the collected target-season outcomes only
+            n_collected = len(season_results) if season_results else 0
             _, playoff_probs, _ = simulate_many_seasons(
                 n_sims=n_sims,  # ignored when season_results is supplied
                 config=config,
@@ -370,6 +373,9 @@ def run_simulation(
         summary = summarize_simulations(sim_results)
         distributions = win_distributions(sim_results)
         achievement_probs = calculate_achievement_probabilities(sim_results, sport)
+        n_playoff_sims = (
+            min(int(n_collected), MAX_PLAYOFF_SIMS) if n_collected else 0
+        )
 
         return {
             "summary": summary,
@@ -378,6 +384,8 @@ def run_simulation(
             "achievement_probs": achievement_probs,
             "playoff_probs": playoff_probs,
             "raw_sim_results": sim_results,
+            "n_sims": int(n_sims),
+            "n_playoff_sims": int(n_playoff_sims),
         }
 
     finally:

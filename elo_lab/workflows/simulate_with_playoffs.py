@@ -14,6 +14,7 @@ from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 
+from elo_lab.playoffs.uncertainty import MAX_PLAYOFF_SIMS
 from elo_lab.workflows.simulate_season import (
     simulate_many_seasons as _original_simulate_many_seasons,
 )
@@ -121,7 +122,7 @@ def simulate_many_seasons(
                 pass
         if accumulate is not None and season_results:
             # Cap only for extreme n_sims; normally use all collected outcomes
-            use = season_results[: max(1, min(len(season_results), 500))]
+            use = season_results[: max(1, min(len(season_results), MAX_PLAYOFF_SIMS))]
             playoff_probs = accumulate(
                 season_results=use,
                 home_advantage=hfa,
@@ -173,7 +174,7 @@ def simulate_many_seasons(
             pass
 
     # Use the exact same simulated seasons for playoffs (no re-sim)
-    use = collected[: max(1, min(len(collected), 500))]
+    use = collected[: max(1, min(len(collected), MAX_PLAYOFF_SIMS))]
     playoff_probs = accumulate(
         season_results=use,
         home_advantage=hfa,

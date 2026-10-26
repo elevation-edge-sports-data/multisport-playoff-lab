@@ -13,6 +13,10 @@ under ``generate_default_sims.default_config``. That config names
 the applied delta is the stored home advantage (NHL 25, NFL 35, NBA 45).
 Margin of victory is on for the rating updates (NHL scale 0.75, NFL and NBA 0.5).
 
+Top-level metadata (``generated_at``, ``version``, ``n_teams``,
+``lock_status``) sits beside ``as_of`` and ``sports``. Sport blocks stay
+``home_advantage``, ``teams``, and ``source``.
+
 Usage (from the repo root):
 
     python -m elo_lab.workflows.export_elo_snapshot
@@ -24,7 +28,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
@@ -249,7 +253,29 @@ def _project_teams(sport: str, ratings: dict) -> Dict[str, float]:
     return {abbr: round(float(by_abbr[abbr]), 4) for abbr in sorted(teams)}
 
 
-def _sport_block(sport: str) -> dict:
+def _snapshot_version() -> str:
+    """Package version with a leading ``v`` (``15.3`` in code becomes ``v15.3``)."""
+    from elo_lab import __version__
+
+    text = str(__version__).strip()
+    if text.lower().startswith("v"):
+        return text
+    return f"v{text}"
+
+
+def _generated_at_utc() -> str:
+    """ISO 8601 UTC timestamp with a timezone offset, no fractional seconds."""
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def _stamp_export(body: dict) -> dict:
+    """Copy the cached body and set ``generated_at`` to this export."""
+    stamped = dict(body)
+    stamped["generated_at"] = _generated_at_utc()
+    return stamped
+
+
+def _sport_block(sport: str) -> Tuple[dict, dict]:
     config, season, from_season, initial = _default_window(sport)
     applied = applied_home_advantage(config, sport)
     stored = _configured_home_field(config)
@@ -293,26 +319,51 @@ def _sport_block(sport: str) -> dict:
         f"{origin}. home_advantage is the Elo compute_pregame adds under the "
         f"public default config (stored home_field {stored_text}, applied {applied:g})."
     )
-    return {
+    block = {
         "home_advantage": applied,
         "teams": _project_teams(sport, ratings),
         "source": source,
     }
+    lock_note = {
+        "season": None if season is None else str(season),
+        "n_locked": n_locked,
+        "n_games": n_games,
+        "status": str(lock.get("status") or "upcoming"),
+    }
+    return block, lock_note
+
+
+def _snapshot_body() -> dict:
+    sports: Dict[str, dict] = {}
+    lock_status: Dict[str, dict] = {}
+    for sport in SPORTS:
+        block, note = _sport_block(sport)
+        key = sport.lower()
+        sports[key] = block
+        lock_status[key] = note
+    return {
+        "as_of": date.today().isoformat(),
+        "generated_at": None,
+        "version": _snapshot_version(),
+        "n_teams": {key: len(block["teams"]) for key, block in sports.items()},
+        "lock_status": lock_status,
+        "sports": sports,
+    }
 
 
 def build_elo_snapshot(*, force: bool = False) -> dict:
-    """NFL, NHL, and NBA ratings plus the home advantage the default config applies."""
+    """NFL, NHL, and NBA ratings plus the home advantage the default config applies.
+
+    Extra top-level keys describe the export. ``sports`` is unchanged.
+    """
     stamp = _data_stamp()
     cached = _CACHE.get("payload")
-    if not force and cached is not None and _CACHE.get("stamp") == stamp:
-        return cached  # type: ignore[return-value]
-    payload = {
-        "as_of": date.today().isoformat(),
-        "sports": {sport.lower(): _sport_block(sport) for sport in SPORTS},
-    }
+    if not force and isinstance(cached, dict) and _CACHE.get("stamp") == stamp:
+        return _stamp_export(cached)
+    payload = _snapshot_body()
     _CACHE["stamp"] = stamp
     _CACHE["payload"] = payload
-    return payload
+    return _stamp_export(payload)
 
 
 def snapshot_json_text(*, force: bool = False) -> str:
@@ -352,6 +403,7 @@ def main(argv: Optional[list] = None) -> None:
     out = write_snapshot(args.out, force=True)
     payload = json.loads(out.read_text(encoding="utf-8"))
     print(f"Wrote {out}")
+    print(f"  version={payload.get('version')} generated_at={payload.get('generated_at')}")
     for sport, block in payload["sports"].items():
         print(
             f"  {sport}: {len(block['teams'])} teams, "

@@ -33,6 +33,12 @@ try:
 except ImportError:
     from app.metadata import load_teams, resolve_team_abbr  # type: ignore
 
+try:
+    from elo_lab.playoffs.uncertainty import format_percent
+except ImportError:  # pragma: no cover
+    def format_percent(pct, n=None, z=1.96):  # type: ignore
+        return f"{float(pct):.1f}%"
+
 
 # ---------------------------------------------------------------------------
 # Round-path palette (Color 1 … Color 5) — see module docstring
@@ -174,6 +180,22 @@ def _text_color_for_bg(pct: float) -> str:
     return "#0f172a" if pct < 55 else "#ffffff"
 
 
+def _probability_cell_inner(pct: float, n_sims: Optional[int]) -> str:
+    """Point estimate first, optional 95% range after it.
+
+    The range is display-only. Callers keep the numeric percent for sorting
+    and for the blue shade.
+    """
+    label = format_percent(pct, n_sims)
+    point, sep, tail = label.partition(" (")
+    if not sep:
+        return point
+    return (
+        f"<span style='font-weight:650;'>{point}</span>"
+        f"<span style='font-weight:450;font-size:0.72rem;'> ({tail}</span>"
+    )
+
+
 @st.cache_data(show_spinner=False)
 def _logo_data_uri(sport: str, abbr: str) -> Optional[str]:
     path_str = _cached_logo_path(sport, abbr)
@@ -299,6 +321,7 @@ def render_playoff_odds_table(
     playoff_probs: Dict[str, Dict[str, float]],
     achievement_probs: Optional[pd.DataFrame] = None,
     summary: Optional[pd.DataFrame] = None,
+    n_sims: Optional[int] = None,
 ) -> pd.DataFrame:
     df = build_playoff_odds_frame(sport, playoff_probs, achievement_probs, summary)
     if df.empty:
@@ -308,6 +331,11 @@ def render_playoff_odds_table(
     sport_u = sport.upper()
     spec = PLAYOFF_TABLE_SPEC[sport_u]
     metric_col = spec["metric_label"] if spec["metric_label"] in df.columns else None
+    round_cols = {
+        spec["round_labels"][k]
+        for k in spec["round_keys"]
+        if spec["round_labels"][k] in df.columns
+    }
 
     preferred = (
         ["team"]
@@ -402,11 +430,16 @@ def render_playoff_odds_table(
                 pct = float(val)
                 bg = _blue_shade(pct)
                 fg = _text_color_for_bg(pct)
+                shown = (
+                    _probability_cell_inner(pct, n_sims)
+                    if c in round_cols
+                    else f"{pct:.1f}%"
+                )
                 cells.append(
-                    f"<td style='text-align:center;padding:4px 6px;"
+                    f"<td style='text-align:center;padding:4px 6px;white-space:nowrap;"
                     f"background:{bg};color:{fg};"
                     f"font-variant-numeric:tabular-nums;font-size:0.85rem;'>"
-                    f"{pct:.1f}%</td>"
+                    f"{shown}</td>"
                 )
         body_rows.append("<tr>" + "".join(cells) + "</tr>")
 
@@ -418,9 +451,16 @@ def render_playoff_odds_table(
         "</table></div>"
     )
     st.markdown(html, unsafe_allow_html=True)
+    interval_note = ""
+    if n_sims:
+        interval_note = (
+            f" Parentheses are an approximate 95% interval "
+            f"(normal approximation, ±1.96 SE, n={int(n_sims):,} playoff simulations)."
+        )
     st.caption(
         "Visualization style inspired by [MoneyPuck](https://moneypuck.com/predictions.htm). "
         "Probabilities from this project's Elo + Monte Carlo engine."
+        + interval_note
     )
     return df
 
@@ -454,6 +494,7 @@ def _build_playoff_spiral(
     round_labels: Dict[str, str],
     radius_key: str,
     radius_label: str,
+    n_sims: Optional[int] = None,
 ) -> go.Figure:
     """
     Playoff spiral for one conference.
@@ -485,10 +526,13 @@ def _build_playoff_spiral(
         colors.append(_team_primary_color(sport_u, t))
         path_bits = []
         for key, lab in round_labels.items():
-            path_bits.append(f"{lab}: {_prob_to_pct(probs.get(key, 0.0)):.1f}%")
+            path_bits.append(
+                f"{lab}: {format_percent(_prob_to_pct(probs.get(key, 0.0)), n_sims)}"
+            )
         name = team_display_name(sport_u, t)
         hover.append(
-            f"<b>{name}</b> ({t})<br><b>{radius_label}: {p_r:.1f}%</b><br>"
+            f"<b>{name}</b> ({t})<br>"
+            f"<b>{radius_label}: {format_percent(p_r, n_sims)}</b><br>"
             + "<br>".join(path_bits)
         )
 
@@ -616,6 +660,7 @@ def _build_playoff_spiral(
 def render_playoff_spirals(
     sport: str,
     playoff_probs: Dict[str, Dict[str, float]],
+    n_sims: Optional[int] = None,
 ) -> None:
     """
     Two playoff spirals — one per conference.
@@ -660,7 +705,7 @@ def render_playoff_spirals(
         index=label_list.index(default_lab) if default_lab in label_list else 0,
         key=f"spiral_metric_{sport_u}",
         help="Bars are scaled so the conference leader on this metric fills the full radius. "
-        "Hover any wedge for that team’s complete playoff path.",
+        "Hover any wedge for that team’s complete playoff path and 95% intervals.",
     )
     radius_key = dict(options)[radius_label]
 
@@ -678,6 +723,7 @@ def render_playoff_spirals(
                 ordered_labels,
                 radius_key=radius_key,
                 radius_label=radius_label,
+                n_sims=n_sims,
             )
             # use_container_width=False keeps the fixed square size so the
             # paper-coordinate logo ring stays circular and aligned.
@@ -692,10 +738,14 @@ def render_playoff_spirals(
                 },
             )
 
+    interval_note = ""
+    if n_sims:
+        interval_note = " Hover percentages include an approximate 95% interval."
     st.caption(
         f"Playoff spirals ({' · '.join(conferences)}): "
         f"radius encodes **{radius_label}** (conference leader = full radius); "
         "color = team primary; hover for the full playoff path."
+        + interval_note
     )
 
 

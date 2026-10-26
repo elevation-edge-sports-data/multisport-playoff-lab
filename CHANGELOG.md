@@ -8,6 +8,8 @@ Moved from the README. Newer releases are listed first. The notes under each ver
 
 | Version | Focus |
 |---------|-------|
+| 15.3    | Elo snapshot export metadata |
+| 15.2    | 95% intervals on Playoff Odds and spiral hover |
 | 15.1    | Keyless NBA live slate: NBA CDN + ESPN scoreboard fallback |
 | 15.0    | Live slate: nflverse / NHL official web API / NBA scoreboard |
 | 14.0    | Lock completed games in target-season Monte Carlo |
@@ -35,6 +37,10 @@ Moved from the README. Newer releases are listed first. The notes under each ver
 
 These are the highlight notes that used to sit above the version table.
 
+**15.3.** The Elo snapshot JSON adds `generated_at`, `version`, `n_teams`, and `lock_status` next to the existing `sports` block. The CLI export and the dashboard **Export Elo snapshot (.json)** download write the same file. Sport blocks are unchanged, so older live-win-probability readers keep working.
+
+**15.2.** Playoff Odds round cells show a 95% range next to the point estimate, for example 42.3% (38.1–46.5). The range is the normal approximation, p ± 1.96 standard errors, clipped to 0–100%. Sorting and the blue shade still use the point estimate. Spiral hover shows the same range. New runs record how many playoff simulations that interval uses.
+
 **15.1.** Live slate pulls completed scores into the season CSV, then those games lock in Monte Carlo. NFL uses nflverse schedules, NHL uses api-web.nhle.com, and NBA uses the NBA CDN scoreboard with an ESPN scoreboard fallback and no key. Sidebar **Refresh live slate** refreshes all three sports, and the Live Slate tab lists locked versus remaining games. CLI: `python -m elo_lab.workflows.live_slate --sport NFL --season 2026` and `python -m elo_lab.workflows.live_slate --sport NBA --season 2026`. `python -m elo_lab.workflows.export_elo_snapshot` writes `outputs/elo_snapshot.json` with current NFL, NHL, and NBA team Elo (after locked games when the live slate has scores, otherwise the default-simulation warm-up) and the home advantage `compute_pregame` applies under the default config. The same JSON is a second download next to Export Results (.xlsx).
 
 **14.0.** Lock completed games in the target-season Monte Carlo: scored games stay fixed across sims; blank games are still sampled. Sidebar lock line, for example `NFL 2026 · upcoming · 0/272 games locked` or `NFL 2026 · in progress · 16/272 games locked`.
@@ -52,6 +58,23 @@ These are the highlight notes that used to sit above the version table.
 **12.1.** Regular Season Projections shows the observed prior-season path and the simulated target path (wins, points, rank). Run scores the current parameters on the last completed season (accuracy, log loss, Brier). Simulation count includes 25. Random seed for reproducible Monte Carlo. Upcoming NFL schedules use `VisTm` / `HomeTm`.
 
 **12.0.** Simulate the upcoming season for NFL 2026, NHL 2026–27, and NBA 2026–27, including the playoff bracket. **Simulate from** chooses the start of the history window. Three-tab dashboard: Playoff Projections, Regular Season Projections, Model Comparison. Grid Search hierarchy, pure binary Margin of Victory, regression to mean on by default. Model Comparison baselines: Always Home, Constant Home Rate, Coin Flip, and Log5. Export Results (.xlsx). Full playoff brackets for all three sports. Instant default simulations when switching sports.
+
+## Version 15.3 — Elo snapshot metadata
+
+### Added
+- `outputs/elo_snapshot.json` now includes `generated_at` (ISO 8601 UTC), `version` (package version), `n_teams` per sport, and `lock_status` (season plus locked-game counts). `sports` is unchanged.
+
+---
+
+## Version 15.2 — Playoff odds uncertainty
+
+### Added
+- Playoff Odds round cells show an approximate 95% interval beside the point estimate (`42.3% (38.1–46.5)`). The interval is `p ± 1.96 * sqrt(p * (1 - p) / n)`, clipped to 0–100%.
+- The point estimate stays the number used for sorting and for the blue probability shade. Wins, points, and regular-season achievement columns are unchanged.
+- Playoff spiral hover shows the same range on each round.
+- New simulation results store `n_sims` and `n_playoff_sims` (the bracket pass still uses at most 500 draws). Older saved runs infer n from the stored draws.
+
+---
 
 ## Version 15.1 — Keyless NBA live slate
 

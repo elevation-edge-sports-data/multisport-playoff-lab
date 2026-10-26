@@ -168,7 +168,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("MultiSport Elo Lab")
-st.caption("NFL / NHL / NBA | Version 15.1")
+st.caption("NFL / NHL / NBA | Version 15.3")
 
 
 # ---------------------------------------------------------------------------
@@ -726,7 +726,9 @@ if st.session_state.get("simulation_results") is not None:
                 help=(
                     "Current NFL, NHL, and NBA Elo after locked games "
                     "(or the default warm-up when none are locked) plus the "
-                    "home advantage the default config applies in compute_pregame."
+                    "home advantage the default config applies in compute_pregame. "
+                    "Same JSON as the CLI export, including generated_at, version, "
+                    "n_teams, and lock_status."
                 ),
                 key="export_elo_snapshot_json",
             )

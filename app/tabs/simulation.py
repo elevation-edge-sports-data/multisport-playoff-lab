@@ -37,6 +37,8 @@ except ImportError:
         PLAYOFF_TABLE_SPEC,
     )
 
+from elo_lab.playoffs.uncertainty import playoff_sample_size
+
 
 def get_team_color_map(sport):
     try:
@@ -70,6 +72,7 @@ def render_simulation_tab(sport="NFL"):
 
     sport_u = sport.upper()
     has_playoff_spec = sport_u in PLAYOFF_TABLE_SPEC
+    n_playoff = playoff_sample_size(results)
 
     # ------------------------------------------------------------------
     # MoneyPuck-style Playoff Odds table
@@ -83,13 +86,14 @@ def render_simulation_tab(sport="NFL"):
             if isinstance(achievement_probs, pd.DataFrame)
             else None,
             summary=summary if isinstance(summary, pd.DataFrame) else None,
+            n_sims=n_playoff,
         )
 
         # ------------------------------------------------------------------
         # Playoff spirals (one per conference)
         # ------------------------------------------------------------------
         st.subheader("Playoff spirals")
-        render_playoff_spirals(sport_u, playoff_probs)
+        render_playoff_spirals(sport_u, playoff_probs, n_sims=n_playoff)
 
         # ------------------------------------------------------------------
         # Playoff path bars (Color 1…5 palette)
