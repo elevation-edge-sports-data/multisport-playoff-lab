@@ -1,28 +1,28 @@
 {
   "NFL:2026": {
-    "fetched_at": "2026-10-29T17:26:21Z",
-    "n_locked": 107,
+    "fetched_at": "2026-10-30T17:01:43Z",
+    "n_locked": 108,
     "n_games": 272,
     "status": "in_progress",
-    "updated": 0,
+    "updated": 1,
     "source": "nflverse",
     "error": null
   },
   "NHL:2027": {
-    "fetched_at": "2026-10-29T17:26:22Z",
-    "n_locked": 202,
+    "fetched_at": "2026-10-30T17:01:44Z",
+    "n_locked": 213,
     "n_games": 1344,
     "status": "in_progress",
-    "updated": 4,
+    "updated": 11,
     "source": "nhl-web-api",
     "error": null
   },
   "NBA:2027": {
-    "fetched_at": "2026-10-29T17:26:31Z",
-    "n_locked": 77,
+    "fetched_at": "2026-10-30T17:01:56Z",
+    "n_locked": 86,
     "n_games": 1200,
     "status": "in_progress",
-    "updated": 15,
+    "updated": 9,
     "source": "espn",
     "error": null
   }
