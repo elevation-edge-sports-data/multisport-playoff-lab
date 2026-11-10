@@ -145,14 +145,14 @@ Sun Nov 8 2026,7:30p,Brooklyn Nets,93.0,Dallas Mavericks,130.0,
 Sun Nov 8 2026,8:00p,Boston Celtics,117.0,Milwaukee Bucks,97.0,
 Sun Nov 8 2026,9:00p,Miami Heat,114.0,Sacramento Kings,108.0,
 Sun Nov 8 2026,9:00p,New Orleans Pelicans,123.0,Los Angeles Clippers,139.0,
-Mon Nov 9 2026,7:00p,Cleveland Cavaliers,,Charlotte Hornets,,
-Mon Nov 9 2026,7:00p,Washington Wizards,,Detroit Pistons,,
-Mon Nov 9 2026,7:00p,Los Angeles Lakers,,Atlanta Hawks,,
-Mon Nov 9 2026,7:30p,Memphis Grizzlies,,Toronto Raptors,,
-Mon Nov 9 2026,8:00p,Indiana Pacers,,Dallas Mavericks,,
-Mon Nov 9 2026,8:30p,Denver Nuggets,,Houston Rockets,,
-Mon Nov 9 2026,9:00p,San Antonio Spurs,,Phoenix Suns,,
-Mon Nov 9 2026,10:00p,New Orleans Pelicans,,Golden State Warriors,,
+Mon Nov 9 2026,7:00p,Cleveland Cavaliers,112.0,Charlotte Hornets,124.0,
+Mon Nov 9 2026,7:00p,Washington Wizards,111.0,Detroit Pistons,122.0,
+Mon Nov 9 2026,7:00p,Los Angeles Lakers,124.0,Atlanta Hawks,114.0,
+Mon Nov 9 2026,7:30p,Memphis Grizzlies,118.0,Toronto Raptors,102.0,
+Mon Nov 9 2026,8:00p,Indiana Pacers,122.0,Dallas Mavericks,125.0,
+Mon Nov 9 2026,8:30p,Denver Nuggets,100.0,Houston Rockets,110.0,
+Mon Nov 9 2026,9:00p,San Antonio Spurs,122.0,Phoenix Suns,96.0,
+Mon Nov 9 2026,10:00p,New Orleans Pelicans,87.0,Golden State Warriors,138.0,
 Tue Nov 10 2026,7:30p,Milwaukee Bucks,,New York Knicks,,
 Tue Nov 10 2026,8:00p,Boston Celtics,,Philadelphia 76ers,,
 Tue Nov 10 2026,9:00p,Los Angeles Clippers,,Phoenix Suns,,
@@ -277,7 +277,7 @@ Fri Nov 27 2026,8:00p,Atlanta Hawks,,Boston Celtics,,NBA Cup
 Fri Nov 27 2026,8:30p,Memphis Grizzlies,,Minnesota Timberwolves,,NBA Cup
 Fri Nov 27 2026,9:00p,Dallas Mavericks,,Phoenix Suns,,NBA Cup
 Fri Nov 27 2026,9:30p,Golden State Warriors,,Portland Trail Blazers,,NBA Cup
-Fri Nov 27 2026,9:30p,New Orleans Pelicans,,Los Angeles Clippers,,NBA Cup
+Fri Nov 27 2026,9:30p,New Orleans Pelicans,123.0,Los Angeles Clippers,139.0,NBA Cup
 Fri Nov 27 2026,9:30p,Los Angeles Lakers,,San Antonio Spurs,,NBA Cup
 Fri Nov 27 2026,9:30p,Denver Nuggets,,Utah Jazz,,NBA Cup
 Sat Nov 28 2026,5:00p,Orlando Magic,,Washington Wizards,,
@@ -758,7 +758,7 @@ Sat Feb 6 2027,8:30p,Los Angeles Lakers,,San Antonio Spurs,,
 Sat Feb 6 2027,10:00p,Phoenix Suns,,Sacramento Kings,,
 Sun Feb 7 2027,3:00p,Denver Nuggets,,Atlanta Hawks,,
 Sun Feb 7 2027,3:00p,Golden State Warriors,,Detroit Pistons,,
-Sun Feb 7 2027,3:30p,Utah Jazz,,Minnesota Timberwolves,,
+Sun Feb 7 2027,3:30p,Utah Jazz,100.0,Minnesota Timberwolves,115.0,
 Sun Feb 7 2027,4:30p,Los Angeles Clippers,,Dallas Mavericks,,
 Sun Feb 7 2027,6:00p,Charlotte Hornets,,Toronto Raptors,,
 Sun Feb 7 2027,7:00p,Boston Celtics,,Philadelphia 76ers,,
