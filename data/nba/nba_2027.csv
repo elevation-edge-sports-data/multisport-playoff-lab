@@ -169,10 +169,10 @@ Wed Nov 11 2026,8:00p,Denver Nuggets,123.0,Memphis Grizzlies,118.0,
 Wed Nov 11 2026,9:00p,Orlando Magic,123.0,Utah Jazz,108.0,
 Wed Nov 11 2026,9:30p,Golden State Warriors,108.0,Houston Rockets,115.0,
 Wed Nov 11 2026,10:00p,Oklahoma City Thunder,103.0,Portland Trail Blazers,123.0,
-Thu Nov 12 2026,7:00p,Toronto Raptors,,Philadelphia 76ers,,
-Thu Nov 12 2026,7:00p,Detroit Pistons,,Washington Wizards,,
-Thu Nov 12 2026,8:00p,Dallas Mavericks,,Minnesota Timberwolves,,
-Thu Nov 12 2026,9:00p,Charlotte Hornets,,Phoenix Suns,,
+Thu Nov 12 2026,7:00p,Toronto Raptors,112.0,Philadelphia 76ers,123.0,
+Thu Nov 12 2026,7:00p,Detroit Pistons,144.0,Washington Wizards,140.0,
+Thu Nov 12 2026,8:00p,Dallas Mavericks,94.0,Minnesota Timberwolves,133.0,
+Thu Nov 12 2026,9:00p,Charlotte Hornets,96.0,Phoenix Suns,101.0,
 Fri Nov 13 2026,7:00p,Milwaukee Bucks,,Orlando Magic,,NBA Cup
 Fri Nov 13 2026,7:00p,New York Knicks,,Indiana Pacers,,NBA Cup
 Fri Nov 13 2026,8:00p,Cleveland Cavaliers,,Miami Heat,,NBA Cup
@@ -262,7 +262,7 @@ Tue Nov 24 2026,8:00p,Boston Celtics,,Washington Wizards,,NBA Cup
 Tue Nov 24 2026,10:00p,Dallas Mavericks,,Denver Nuggets,,NBA Cup
 Wed Nov 25 2026,5:00p,Miami Heat,,Philadelphia 76ers,,NBA Cup
 Wed Nov 25 2026,7:00p,Chicago Bulls,,Charlotte Hornets,,NBA Cup
-Wed Nov 25 2026,7:30p,Cleveland Cavaliers,,New York Knicks,,NBA Cup
+Wed Nov 25 2026,7:30p,Cleveland Cavaliers,115.0,New York Knicks,107.0,NBA Cup
 Wed Nov 25 2026,7:30p,Minnesota Timberwolves,,Oklahoma City Thunder,,NBA Cup
 Wed Nov 25 2026,8:00p,Los Angeles Clippers,,Memphis Grizzlies,,NBA Cup
 Wed Nov 25 2026,8:00p,Brooklyn Nets,,Milwaukee Bucks,,NBA Cup
@@ -697,14 +697,14 @@ Fri Jan 29 2027,9:30p,Charlotte Hornets,,Minnesota Timberwolves,,
 Sat Jan 30 2027,12:30p,Philadelphia 76ers,,Miami Heat,,
 Sat Jan 30 2027,3:00p,Denver Nuggets,,Oklahoma City Thunder,,
 Sat Jan 30 2027,5:30p,San Antonio Spurs,,Golden State Warriors,,
-Sat Jan 30 2027,7:00p,Washington Wizards,,Indiana Pacers,,
+Sat Jan 30 2027,7:00p,Washington Wizards,101.0,Indiana Pacers,114.0,
 Sat Jan 30 2027,7:30p,New Orleans Pelicans,,Cleveland Cavaliers,,
 Sat Jan 30 2027,8:00p,Atlanta Hawks,,Milwaukee Bucks,,
 Sat Jan 30 2027,8:30p,Los Angeles Lakers,,New York Knicks,,
 Sat Jan 30 2027,9:30p,Memphis Grizzlies,110.0,Utah Jazz,105.0,
 Sun Jan 31 2027,3:00p,Sacramento Kings,,Detroit Pistons,,
 Sun Jan 31 2027,6:00p,Brooklyn Nets,,Orlando Magic,,
-Sun Jan 31 2027,6:00p,Boston Celtics,,Toronto Raptors,,
+Sun Jan 31 2027,6:00p,Boston Celtics,98.0,Toronto Raptors,93.0,
 Sun Jan 31 2027,6:00p,Phoenix Suns,,Minnesota Timberwolves,,
 Sun Jan 31 2027,6:00p,Chicago Bulls,,Oklahoma City Thunder,,
 Sun Jan 31 2027,7:00p,Los Angeles Lakers,,Charlotte Hornets,,
@@ -882,7 +882,7 @@ Sun Feb 28 2027,10:30p,Portland Trail Blazers,,Los Angeles Clippers,,
 Mon Mar 1 2027,7:00p,Chicago Bulls,,Detroit Pistons,,
 Mon Mar 1 2027,7:00p,Philadelphia 76ers,,Cleveland Cavaliers,,
 Mon Mar 1 2027,8:00p,Utah Jazz,113.0,New Orleans Pelicans,120.0,
-Mon Mar 1 2027,8:30p,Golden State Warriors,,Houston Rockets,,
+Mon Mar 1 2027,8:30p,Golden State Warriors,108.0,Houston Rockets,115.0,
 Mon Mar 1 2027,9:00p,Brooklyn Nets,,Denver Nuggets,,
 Mon Mar 1 2027,9:30p,Washington Wizards,,Phoenix Suns,,
 Tue Mar 2 2027,7:00p,Boston Celtics,,Indiana Pacers,,
