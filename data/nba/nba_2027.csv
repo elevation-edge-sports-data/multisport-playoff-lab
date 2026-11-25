@@ -257,9 +257,9 @@ Mon Nov 23 2026,8:00p,Phoenix Suns,123.0,New Orleans Pelicans,119.0,
 Mon Nov 23 2026,8:30p,Los Angeles Clippers,104.0,Houston Rockets,116.0,
 Mon Nov 23 2026,10:00p,Utah Jazz,109.0,Los Angeles Lakers,97.0,
 Mon Nov 23 2026,10:00p,San Antonio Spurs,123.0,Sacramento Kings,107.0,
-Tue Nov 24 2026,7:00p,Detroit Pistons,,Orlando Magic,,NBA Cup
-Tue Nov 24 2026,8:00p,Boston Celtics,,Washington Wizards,,NBA Cup
-Tue Nov 24 2026,10:00p,Dallas Mavericks,,Denver Nuggets,,NBA Cup
+Tue Nov 24 2026,7:00p,Detroit Pistons,104.0,Orlando Magic,86.0,NBA Cup
+Tue Nov 24 2026,8:00p,Boston Celtics,131.0,Washington Wizards,116.0,NBA Cup
+Tue Nov 24 2026,10:00p,Dallas Mavericks,120.0,Denver Nuggets,101.0,NBA Cup
 Wed Nov 25 2026,5:00p,Miami Heat,,Philadelphia 76ers,,NBA Cup
 Wed Nov 25 2026,7:00p,Chicago Bulls,,Charlotte Hornets,,NBA Cup
 Wed Nov 25 2026,7:30p,Cleveland Cavaliers,115.0,New York Knicks,107.0,NBA Cup
@@ -321,7 +321,7 @@ Wed Dec 2 2026,9:00p,Sacramento Kings,,Phoenix Suns,,
 Wed Dec 2 2026,10:30p,Minnesota Timberwolves,,Los Angeles Clippers,,
 Thu Dec 3 2026,7:00p,Indiana Pacers,,Atlanta Hawks,,
 Thu Dec 3 2026,7:30p,Washington Wizards,,Miami Heat,,
-Thu Dec 3 2026,8:00p,Cleveland Cavaliers,,Chicago Bulls,,
+Thu Dec 3 2026,8:00p,Cleveland Cavaliers,108.0,Chicago Bulls,122.0,
 Thu Dec 3 2026,8:00p,Toronto Raptors,,San Antonio Spurs,,
 Thu Dec 3 2026,10:00p,Utah Jazz,,Portland Trail Blazers,,
 Sat Dec 12 2026,5:00p,Milwaukee Bucks,,Memphis Grizzlies,,
@@ -752,7 +752,7 @@ Sat Feb 6 2027,3:00p,Miami Heat,,Minnesota Timberwolves,,
 Sat Feb 6 2027,5:30p,Portland Trail Blazers,,Memphis Grizzlies,,
 Sat Feb 6 2027,6:00p,Washington Wizards,,Brooklyn Nets,,
 Sat Feb 6 2027,7:30p,Orlando Magic,,Cleveland Cavaliers,,
-Sat Feb 6 2027,7:30p,Milwaukee Bucks,,Toronto Raptors,,
+Sat Feb 6 2027,7:30p,Milwaukee Bucks,116.0,Toronto Raptors,111.0,
 Sat Feb 6 2027,8:00p,New Orleans Pelicans,,Chicago Bulls,,
 Sat Feb 6 2027,8:30p,Los Angeles Lakers,,San Antonio Spurs,,
 Sat Feb 6 2027,10:00p,Phoenix Suns,128.0,Sacramento Kings,107.0,
@@ -854,7 +854,7 @@ Thu Feb 25 2027,7:30p,Oklahoma City Thunder,,New York Knicks,,
 Thu Feb 25 2027,7:30p,Philadelphia 76ers,135.0,Brooklyn Nets,123.0,
 Thu Feb 25 2027,8:00p,Atlanta Hawks,,Chicago Bulls,,
 Thu Feb 25 2027,8:00p,Washington Wizards,,Milwaukee Bucks,,
-Thu Feb 25 2027,8:00p,Phoenix Suns,,New Orleans Pelicans,,
+Thu Feb 25 2027,8:00p,Phoenix Suns,123.0,New Orleans Pelicans,119.0,
 Thu Feb 25 2027,10:00p,Dallas Mavericks,,Golden State Warriors,,
 Thu Feb 25 2027,10:30p,Utah Jazz,132.0,Los Angeles Clippers,107.0,
 Fri Feb 26 2027,7:30p,Cleveland Cavaliers,,Boston Celtics,,
